@@ -1,6 +1,6 @@
-# GUARDIAN - Real-Time Pricing Intelligence & AI Agent Platform
+# GUARDIAN - Real-Time Pricing & Human-in-the-Loop AI Agent Platform
 
-Đây là bộ mã nguồn Boilerplate (Khung dự án chuẩn) phục vụ cho cuộc thi AI Hackathon. Hệ thống tích hợp khả năng giám sát giá đa kênh thời gian thực (Shopee, Lazada, TikTok Shop, GrabMart) đối với Top 200 SKU và vận hành **AI Pricing Agent** tự động để tối ưu hóa biên lợi nhuận.
+Đây là bộ mã nguồn Boilerplate (Khung dự án chuẩn) phục vụ cho cuộc thi AI Hackathon. Hệ thống tích hợp khả năng giám sát giá đa kênh thời gian thực (Shopee, Lazada, TikTok Shop, GrabMart) đối với Top 200 SKU và vận hành **LangGraph AI Agent** kết hợp cơ chế kiểm soát phê duyệt của con người (**Human-in-the-Loop - HITL**) nhằm tối ưu hóa biên lợi nhuận một cách an toàn và tin cậy.
 
 ---
 
@@ -11,11 +11,11 @@ Sơ đồ dưới đây mô tả cấu trúc hoạt động của sản phẩm �
 
 ```mermaid
 graph TD
-    User([Commercial Team]) -->|Thao tác & Theo dõi| FE[Frontend: React + Vite]
+    User([Category Manager]) -->|Phê duyệt / Từ chối hành động| FE[Frontend: React + Vite]
     
     subgraph REST API & WebSockets
-        FE -->|API Requests| BE[Backend: FastAPI]
-        BE -->|Real-time Logs / Stats| FE
+        FE -->|API Requests & Approvals| BE[Backend: FastAPI]
+        BE -->|Real-time Logs / Action Status| FE
     end
 
     subgraph Data & Caching Layer
@@ -29,18 +29,18 @@ graph TD
     end
 
     Scraper -->|Scraped Data| DB
-    Agent -->|Execute Actions / Logs| DB
+    Agent -->|Propose Actions & Logs| DB
 ```
 
 ---
 
-### 2. Luồng Phối Hợp Giữa Các Frameworks AI (Framework Collaboration Workflow)
-Sơ đồ này mô tả cách thức các thư viện và nền tảng AI nâng cao bao gồm **LangGraph, Crawl4AI, Apify, LlamaIndex, OpenAI và Langfuse** phối hợp với nhau trong một vòng lặp tự trị đóng để xử lý chênh lệch giá:
+### 2. Luồng Phối Hợp Giữa Các Frameworks AI & Human-in-the-Loop (HITL Workflow)
+Sơ đồ này mô tả cách thức các thư viện và nền tảng AI nâng cao (**LangGraph, Crawl4AI, Apify, LlamaIndex, OpenAI và Langfuse**) phối hợp với nhau và tích hợp cơ chế phê duyệt thủ công (**Human-in-the-Loop**) để xử lý chênh lệch giá một cách an toàn:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant CM as Category Manager
+    participant CM as Category Manager (Human)
     participant SE as Scraper Engine (Apify & Crawl4AI)
     participant DB as PostgreSQL / SQLite
     participant LG as LangGraph StateMachine
@@ -62,39 +62,36 @@ sequenceDiagram
     LLM-->>LG: Trả về kết quả JSON (strategy: "match" hoặc "negotiate")
     
     alt Strategy is MATCH (Biên lợi nhuận >= 15%)
-        LG->>DB: Thực thi khớp giá tự động (adjust_system_price)<br/>Giải quyết cảnh báo (Alert Resolved)
+        LG->>DB: Đề xuất khớp giá tự động với trạng thái CHỜ DUYỆT (Action Status: Pending)
     else Strategy is NEGOTIATE (Biên lợi nhuận < 15%)
         LG->>LI: Truy vấn chính sách hỗ trợ hãng (query_supplier_policy_rag)
         LI->>LI: Tra cứu ngữ nghĩa trong supplier_policies.txt
         LI-->>LG: Trả về điều khoản hoàn tiền & email liên hệ đại diện hãng
-        LG->>DB: Tạo email thương lượng giá nhập gửi Supplier (SUPPLIER_EMAIL_DRAFT)
+        LG->>DB: Tạo thư đàm phán gửi Supplier với trạng thái ĐÃ XỬ LÝ (Action Status: Executed)
     end
     
-    LG->>DB: Lưu toàn bộ logs suy nghĩ (Thoughts) & Hành động (Actions)
-    DB-->>CM: Hiển thị Live Terminal & Thư nháp trên Dashboard
+    LG->>DB: Lưu toàn bộ logs suy nghĩ (Thoughts)
+    DB-->>CM: Hiển thị Đề xuất Khớp giá (Chờ duyệt) trên Dashboard
+    
+    Note over CM: CM xem xét chênh lệch & biên lợi nhuận
+    CM->>DB: Bấm Phê duyệt (Approve) hành động
+    DB->>DB: Cập nhật giá bán mới của Guardian & Đóng cảnh báo (Alert Resolved)
 ```
 
 ---
 
-## 🧠 Vai Trò Của AI Agent Trong Hệ Thống (Agent Roles)
+## 🧠 Vai Trò Của AI Agent & Human-in-the-Loop (HITL)
 
-Trong nền tảng **GUARDIAN**, AI Pricing Agent đóng vai trò cốt lõi, thay thế các quy trình nghiệp vụ thủ công phức tạp bằng chuỗi hành vi thông minh tự trị (Autonomous Agentic Workflows):
+Trong nền tảng **GUARDIAN**, AI Pricing Agent không hoạt động một cách mù quáng mà phối hợp chặt chẽ với Category Manager qua cơ chế **Human-in-the-Loop (HITL)**:
 
-1.  **Market Observer (Giám sát & Phát hiện Bất thường):**
-    *   *Vai trò:* Theo dõi liên tục biến động giá Net Price của toàn bộ Top 200 SKU trên các kênh Shopee, Lazada, TikTok Shop, GrabMart.
-    *   *Hành vi:* Phát hiện lập tức các hành vi phá giá của đối thủ hoặc cơ hội tăng giá của Guardian khi đối thủ hết hàng/tăng giá, tự động kích hoạt cảnh báo tương ứng với mức độ nghiêm trọng (High, Medium, Low).
-
-2.  **Margin Guardian (Bảo vệ Biên lợi nhuận):**
-    *   *Vai trò:* Là chốt chặn bảo mật an toàn tài chính của doanh nghiệp.
-    *   *Hành vi:* Thay vì tự động giảm giá mù quáng theo đối thủ để cạnh tranh (dẫn đến chiến tranh giá phá hủy biên lợi nhuận), Agent luôn đối chiếu giá đối thủ với **Cost Price (Giá vốn)** của sản phẩm để bảo vệ biên lợi nhuận tối thiểu được quy định trong cấu hình (mặc định là 15%).
-
-3.  **Autonomous Decision-Maker (Quyết định Điều phối):**
-    *   *Vai trò:* Phân tích đa chiều và đưa ra phương án xử lý tối ưu.
-    *   *Hành vi:* Sử dụng các quy tắc nghiệp vụ kết hợp suy luận để phân loại sản phẩm và quyết định: khi nào nên **Auto-Match giá** để chiếm lĩnh thị phần, khi nào nên **Maintain giá** để bảo toàn lợi nhuận, và khi nào nên **Yêu cầu hỗ trợ giá nhập**.
-
-4.  **Supplier Negotiator (Đàm phán viên ảo):**
-    *   *Vai trò:* Hỗ trợ Category Manager soạn thảo đàm phán với nhà cung cấp.
-    *   *Hành vi:* Khi giá bán của đối thủ giảm xuống dưới mức giá vốn an toàn của Guardian, Agent sẽ tự động soạn thảo email đề xuất đàm phán (Purchase Cost Rebates) gửi nhà cung cấp dựa trên thông tin nhà sản xuất của sản phẩm đó, giúp doanh nghiệp đạt được chi phí nhập rẻ hơn mà không cần Category Manager ngồi viết email thủ công cho từng nhà cung cấp.
+1.  **Market Observer Agent (Giám sát & Phát hiện Bất thường):**
+    *   *Nhiệm vụ:* Theo dõi liên tục biến động giá Net Price của đối thủ trên các kênh Shopee, Lazada, TikTok Shop, GrabMart bằng **Apify** và **Crawl4AI**.
+2.  **Margin Guardian Agent (Đề xuất tối ưu bằng LangGraph):**
+    *   *Nhiệm vụ:* Khi phát hiện phá giá, Agent sử dụng đồ thị trạng thái **LangGraph** để lập luận. Nếu biên lợi nhuận ròng dự kiến đạt trên ngưỡng an toàn (>15%), Agent sẽ tạo một hành động **AUTO_PRICE_MATCH** ở trạng thái **Pending (Chờ duyệt)** thay vì tự động đổi giá ngay lập tức, đảm bảo quyền kiểm soát tối cao thuộc về con người.
+3.  **Supplier Negotiator Agent (Đàm phán viên ảo bằng LlamaIndex RAG):**
+    *   *Nhiệm vụ:* Nếu biên lợi nhuận rớt xuống dưới ngưỡng an toàn (<15%), Agent chuyển hướng đàm phán, tự động dùng **LlamaIndex** tra cứu các điều khoản giảm giá nhập trong hợp đồng (`supplier_policies.txt`) và soạn thư nháp hoàn chỉnh gửi Supplier.
+4.  **Category Manager (Quyền phê duyệt tối cao):**
+    *   *Nhiệm vụ:* Category Manager chỉ cần mở **AI Agent Workspace**, xem xét các hành động khớp giá do AI đề xuất và bấm **Duyệt Khớp Giá (Approve)** hoặc **Từ Chối (Reject)** để kiểm soát rủi ro kinh doanh.
 
 ---
 
@@ -121,7 +118,10 @@ Trong nền tảng **GUARDIAN**, AI Pricing Agent đóng vai trò cốt lõi, th
 │   └── vite.config.js        # Vite config
 ├── scripts/                  # Công cụ & Kịch bản bổ trợ
 │   ├── generate_mock_data.py # Tạo 200 SKU & Seed CSDL
-│   └── test_backend.py       # Kiểm thử API Endpoints tự động
+│   ├── test_backend.py       # Kiểm thử API Endpoints tự động
+│   └── test_matching_agent.py# Kiểm thử độ tương đồng khử nhiễu LlamaIndex
+├── mock_data/                # Tệp tin mẫu phục vụ demo
+│   └── guardian_master_sku.csv # Tệp sản phẩm chuẩn để nạp động
 ├── docs/                     # Tài liệu & Pitch Deck dàn ý
 ├── docker-compose.yml        # PostgreSQL & Redis container setup (Tùy chọn)
 └── .env                      # Cấu hình biến môi trường
@@ -135,14 +135,11 @@ Trong nền tảng **GUARDIAN**, AI Pricing Agent đóng vai trò cốt lõi, th
 Mở Terminal tại thư mục gốc của dự án:
 
 ```bash
-# 1. Tạo môi trường ảo Python
-python -m venv .venv
+# 1. Tạo môi trường ảo Python 3.12 (khuyên dùng để có sẵn gói wheels cho Windows)
+py -3.12 -m venv .venv312
 
 # 2. Kích hoạt môi trường ảo
-# Trên Windows:
-.venv\Scripts\activate
-# Trên macOS/Linux:
-source .venv/bin/activate
+.venv312\Scripts\activate
 
 # 3. Cài đặt các thư viện (Đã bao gồm LangGraph, Crawl4AI, Apify, LlamaIndex, Langfuse)
 pip install -r backend/requirements.txt
@@ -166,8 +163,10 @@ npm run dev
 ```
 Truy cập giao diện tại: `http://localhost:3000`
 
-### 3. Kiểm thử API tự động
-Bạn có thể kiểm tra xem các API có hoạt động đúng không bằng cách chạy:
+### 3. Kiểm thử thuật toán khử nhiễu của Agent
+Kiểm tra xem hệ thống khớp giá và loại bỏ sản phẩm sai định lượng dung tích hoạt động như thế nào bằng lệnh:
 ```bash
-python scripts/test_backend.py
+python scripts/test_matching_agent.py
 ```
+---
+*Chúc các bạn đạt giải cao nhất trong cuộc thi AI Hackathon sắp tới!*
