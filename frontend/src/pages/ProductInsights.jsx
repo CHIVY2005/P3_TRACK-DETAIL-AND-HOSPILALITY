@@ -215,8 +215,9 @@ function ProductInsights() {
                       {/* Competitor prices */}
                       {productDetail.competitor_prices && 
                        productDetail.competitor_prices.slice(0, 5).map(cp => {
-                         const diff = cp.net_price - productDetail.guardian_price
-                         const diffPct = (diff / productDetail.guardian_price) * 100
+                         const isOos = cp.stock_status === 'OUT_OF_STOCK' || cp.net_price === null;
+                         const diff = isOos ? null : cp.net_price - productDetail.guardian_price;
+                         const diffPct = isOos ? null : (diff / productDetail.guardian_price) * 100;
                          return (
                            <tr key={cp.id}>
                              <td>
@@ -225,15 +226,24 @@ function ProductInsights() {
                                </span>
                                <strong>{cp.competitor_name}</strong>
                              </td>
-                             <td>{cp.raw_price.toLocaleString()}đ</td>
-                             <td>{cp.discount > 0 ? `${cp.discount.toLocaleString()}đ` : '-'}</td>
-                             <td><span style={{ color: 'var(--primary)' }}>{cp.voucher_details || '-'}</span></td>
-                             <td>{cp.promo_mechanics || '-'}</td>
-                             <td><strong>{cp.net_price.toLocaleString()}đ</strong></td>
-                             <td style={{ color: diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--text-muted)', fontWeight: '600' }}>
-                               {diff > 0 ? `+${diff.toLocaleString()}đ (+${Math.round(diffPct)}%)` : 
-                                diff < 0 ? `${diff.toLocaleString()}đ (${Math.round(diffPct)}%)` : 
-                                'Bằng giá'}
+                             <td>{isOos ? '-' : `${cp.raw_price.toLocaleString()}đ`}</td>
+                             <td>{isOos ? '-' : (cp.discount > 0 ? `${cp.discount.toLocaleString()}đ` : '-')}</td>
+                             <td><span style={{ color: 'var(--primary)' }}>{isOos ? '-' : (cp.voucher_details || '-')}</span></td>
+                             <td>{isOos ? '-' : (cp.promo_mechanics || '-')}</td>
+                             <td>
+                               {isOos ? (
+                                 <span className="badge badge-danger" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                   HẾT HÀNG (OOS)
+                                 </span>
+                               ) : (
+                                 <strong>{cp.net_price.toLocaleString()}đ</strong>
+                               )}
+                             </td>
+                             <td style={{ color: isOos ? '#10b981' : (diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--text-muted)'), fontWeight: '600' }}>
+                               {isOos ? 'N/A (Lợi thế kho)' : 
+                                (diff > 0 ? `+${diff.toLocaleString()}đ (+${Math.round(diffPct)}%)` : 
+                                 diff < 0 ? `${diff.toLocaleString()}đ (${Math.round(diffPct)}%)` : 
+                                 'Bằng giá')}
                              </td>
                              <td>
                                <a href={cp.url} target="_blank" rel="noreferrer" className="alert-resolve-btn" style={{ display: 'inline-block' }}>

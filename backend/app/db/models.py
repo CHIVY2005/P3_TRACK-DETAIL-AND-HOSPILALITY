@@ -28,9 +28,10 @@ class CompetitorPrice(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     competitor_name = Column(String(100), index=True, nullable=False)  # Shopee, Lazada, TikTok Shop, etc.
-    raw_price = Column(Float, nullable=False)
+    raw_price = Column(Float, nullable=True)
     discount = Column(Float, default=0.0)
-    net_price = Column(Float, nullable=False)
+    net_price = Column(Float, nullable=True)
+    stock_status = Column(String(50), default="IN_STOCK", nullable=False) # IN_STOCK, OUT_OF_STOCK
     voucher_details = Column(String(255), nullable=True)
     promo_mechanics = Column(String(255), nullable=True)
     url = Column(String(500), nullable=True)

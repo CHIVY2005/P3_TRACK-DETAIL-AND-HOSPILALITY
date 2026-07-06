@@ -170,3 +170,5 @@ python scripts/test_matching_agent.py
 ```
 ---
 *Chúc các bạn đạt giải cao nhất trong cuộc thi AI Hackathon sắp tới!*
+
+![GUARDIAN Dashboard Preview](docs/dashboard_preview.png)

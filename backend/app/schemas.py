@@ -5,9 +5,10 @@ from datetime import datetime
 # --- Competitor Price Schemas ---
 class CompetitorPriceBase(BaseModel):
     competitor_name: str
-    raw_price: float
-    discount: float
-    net_price: float
+    raw_price: Optional[float] = None
+    discount: float = 0.0
+    net_price: Optional[float] = None
+    stock_status: str = "IN_STOCK"
     voucher_details: Optional[str] = None
     promo_mechanics: Optional[str] = None
     url: Optional[str] = None

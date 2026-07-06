@@ -29,25 +29,32 @@ def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
         avg_price = product.guardian_price
         recommendation = "Maintain Price"
     else:
-        # Calculate average competitor net price
-        avg_price = sum(item.net_price for item in latest_prices) / len(latest_prices)
-        if avg_price > 0:
-            cpi = (product.guardian_price / avg_price) * 100
+        # Filter out competitors that are OUT_OF_STOCK or have no net_price
+        in_stock_prices = [item.net_price for item in latest_prices if item.stock_status != "OUT_OF_STOCK" and item.net_price is not None]
+        
+        if in_stock_prices:
+            avg_price = sum(in_stock_prices) / len(in_stock_prices)
+            if avg_price > 0:
+                cpi = (product.guardian_price / avg_price) * 100
+            else:
+                cpi = 100.0
+            
+            # Determine recommendation based on thresholds
+            overprice_limit = 100.0 * (1.0 + settings.ALERT_OVERPRICE_THRESHOLD)
+            underprice_limit = 100.0 * (1.0 - settings.ALERT_UNDERPRICE_THRESHOLD)
+
+            if cpi > overprice_limit:
+                recommendation = "Lower Price"
+            elif cpi < underprice_limit:
+                recommendation = "Increase Price"
+            else:
+                recommendation = "Maintain Price"
         else:
+            # All competitors are OUT_OF_STOCK!
+            # Retail Intelligence: Maintain Price (No competition pressure)
             cpi = 100.0
-
-        # Determine recommendation based on thresholds
-        # Note: CPI > 100 means Guardian is more expensive.
-        # CPI < 100 means Guardian is cheaper.
-        overprice_limit = 100.0 * (1.0 + settings.ALERT_OVERPRICE_THRESHOLD)
-        underprice_limit = 100.0 * (1.0 - settings.ALERT_UNDERPRICE_THRESHOLD)
-
-        if cpi > overprice_limit:
-            recommendation = "Lower Price"
-        elif cpi < underprice_limit:
-            recommendation = "Increase Price"
-        else:
-            recommendation = "Maintain Price"
+            avg_price = product.guardian_price
+            recommendation = "Maintain Price (Competitors OOS)"
 
     # 3. Create or update pricing index
     index_record = db.query(PricingIndex).filter(PricingIndex.product_id == product_id).first()
@@ -94,6 +101,8 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
 
     # Competitor-specific severe undercutting alerts
     for cp in latest_prices:
+        if cp.stock_status == "OUT_OF_STOCK" or cp.net_price is None:
+            continue
         # If competitor is much cheaper than Guardian
         if product.guardian_price > 0:
             cheaper_ratio = (product.guardian_price - cp.net_price) / product.guardian_price

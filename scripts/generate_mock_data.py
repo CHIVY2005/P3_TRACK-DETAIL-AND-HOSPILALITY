@@ -182,16 +182,28 @@ def create_mock_data():
                     voucher = None
                     promo = None
                 
-                # Base price calculation
-                raw_price = round(guardian_price * price_factor, -3)
-                discount_amount = round(raw_price * discount_pct, -3)
-                net_price = raw_price - discount_amount
+                # 10% chance of competitor being OUT_OF_STOCK
+                is_oos = random.random() < 0.10
                 
-                # Voucher deduction
-                if voucher and "10k" in voucher:
-                    net_price = max(1000, net_price - 10000)
-                elif voucher and "20k" in voucher:
-                    net_price = max(1000, net_price - 20000)
+                if is_oos:
+                    raw_price = None
+                    discount_amount = 0.0
+                    net_price = None
+                    stock_status = "OUT_OF_STOCK"
+                    voucher = None
+                    promo = None
+                else:
+                    # Base price calculation
+                    raw_price = round(guardian_price * price_factor, -3)
+                    discount_amount = round(raw_price * discount_pct, -3)
+                    net_price = raw_price - discount_amount
+                    
+                    # Voucher deduction
+                    if voucher and "10k" in voucher:
+                        net_price = max(1000, net_price - 10000)
+                    elif voucher and "20k" in voucher:
+                        net_price = max(1000, net_price - 20000)
+                    stock_status = "IN_STOCK"
                     
                 comp_slug = competitor.lower().replace(" ", "")
                 url = f"https://www.{comp_slug}.vn/search?q={barcode}"
@@ -202,6 +214,7 @@ def create_mock_data():
                     "raw_price": raw_price,
                     "discount": discount_amount,
                     "net_price": net_price,
+                    "stock_status": stock_status,
                     "voucher_details": voucher,
                     "promo_mechanics": promo,
                     "url": url,
@@ -215,7 +228,7 @@ def create_mock_data():
         writer.writerows(sku_master)
         
     with open("data/competitor_mock.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["product_id", "competitor_name", "raw_price", "discount", "net_price", "voucher_details", "promo_mechanics", "url", "scraped_at"])
+        writer = csv.DictWriter(f, fieldnames=["product_id", "competitor_name", "raw_price", "discount", "net_price", "stock_status", "voucher_details", "promo_mechanics", "url", "scraped_at"])
         writer.writeheader()
         writer.writerows(competitor_prices)
         
@@ -273,6 +286,7 @@ def seed_database(sku_master, competitor_prices):
                     raw_price=cp["raw_price"],
                     discount=cp["discount"],
                     net_price=cp["net_price"],
+                    stock_status=cp.get("stock_status", "IN_STOCK"),
                     voucher_details=cp["voucher_details"],
                     promo_mechanics=cp["promo_mechanics"],
                     url=cp["url"],
