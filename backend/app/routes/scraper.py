@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.db.session import get_db
 from app.db import models
-from app.scraper.mock_scraper import run_scraper_for_all_products, scrape_realtime_competitor_prices
+from app.scraper.scraper_engine import run_scraper_for_all_products, scrape_realtime_competitor_prices
 
 router = APIRouter()
 
