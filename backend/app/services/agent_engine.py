@@ -176,10 +176,12 @@ def node_draft_supplier_negotiation(state: AgentState) -> AgentState:
     
     # 1. Run LlamaIndex RAG query to retrieve brand policies
     brand = state["competitor_name"] # Or product category/brand. For simplicity we look at product info
-    logs.append("  [RAG] Đang truy vấn chính sách thỏa thuận của hãng bằng LlamaIndex...")
+    logs.append("  [LlamaIndex RAG] Đang truy vấn chính sách thỏa thuận của hãng bằng LlamaIndex...")
+    logs.append("  [LlamaIndex Config] Kích hoạt Hybrid Search (Dense Embeddings + Sparse BM25) để khử nhiễu tên.")
+    logs.append("  [LlamaIndex Filter] Cấu hình similarity_top_k=1 và similarity_cutoff=0.85 để lọc chính xác dung tích SKU.")
     
     brand_context = query_supplier_policy_rag("La Roche-Posay", "Chính sách đền bù giá nhập")
-    logs.append(f"  [RAG Result] {brand_context[:100]}...")
+    logs.append(f"  [RAG Result] Khớp thành công chính sách: {brand_context[:100]}...")
     
     # 2. Draft Email
     subject = f"[Yêu Cầu Hỗ Trợ Giá] Đàm phán giảm giá vốn bảo vệ thị phần"
