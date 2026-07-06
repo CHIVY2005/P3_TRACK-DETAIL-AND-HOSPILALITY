@@ -9,15 +9,47 @@ function Configuration() {
   const [minMargin, setMinMargin] = useState(15)
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [csvFile, setCsvFile] = useState(null)
+  const [uploading, setUploading] = useState(false)
 
   const handleSaveConfig = (e) => {
     e.preventDefault()
     setLoading(true)
-    // Simulate API update for settings
     setTimeout(() => {
       setLoading(false)
       alert('Đã lưu cấu hình tham số AI Agent & Chỉ số Cảnh báo thành công!')
     }, 800)
+  }
+
+  const handleFileChange = (e) => {
+    setCsvFile(e.target.files[0])
+  }
+
+  const handleUploadCsv = async (e) => {
+    e.preventDefault()
+    if (!csvFile) {
+      alert('Vui lòng chọn tệp tin .csv trước!')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('file', csvFile)
+
+    try {
+      setUploading(true)
+      const res = await axios.post(`${API_BASE_URL}/products/import-csv`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      alert(res.data.message)
+      setCsvFile(null)
+      document.getElementById('csv-file-input').value = ''
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Lỗi khi tải lên file CSV.')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleResetDatabase = async () => {
@@ -26,11 +58,6 @@ function Configuration() {
 
     try {
       setSeeding(true)
-      // Call mock scraper to reinitialize or write a small backend trigger
-      // To make it easy, we trigger scraper to recreate or we can make a post to scraper to reset.
-      // Let's call the scraper trigger which recalibrates or mock run.
-      // For boilerplate simplicity, we can call /api/v1/scraper/trigger or let them know they can run the script.
-      // Let's call trigger scrape to reset values.
       await axios.post(`${API_BASE_URL}/scraper/trigger`, {})
       alert('Đã gửi yêu cầu Reset & Recalibrate. Cơ sở dữ liệu đang đồng bộ lại!')
     } catch (err) {
@@ -122,37 +149,67 @@ function Configuration() {
           </form>
         </div>
 
-        {/* Database Management & Tools */}
-        <div className="section-card glass" style={{ padding: '28px', display: 'flex', flexDirection: 'column' }}>
-          <div className="section-header" style={{ marginBottom: '24px' }}>
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
-              <AlertCircle size={18} />
-              Khu Vực Quản Trị Hệ Thống
+        {/* Database Management & Dynamic Importer */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* CSV Importer Card */}
+          <div className="section-card glass" style={{ padding: '28px' }}>
+            <div className="section-header" style={{ marginBottom: '16px' }}>
+              <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
+                <RefreshCw size={18} />
+                Nạp Danh Sách SKU Động (Dynamic CSV Importer)
+              </div>
             </div>
-          </div>
-
-          <div style={{ flexGrow: 1 }}>
-            <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-muted)' }}>
-              Trong quá trình thuyết trình Hackathon, bạn có thể cần tái lập cơ sở dữ liệu về trạng thái sạch ban đầu để demo mượt mà từ đầu chu kỳ quét đến chu kỳ chạy tối ưu của AI Agent.
-            </p>
             
-            <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '12px', padding: '16px', marginTop: '20px' }}>
-              <h4 style={{ color: 'var(--danger)', fontSize: '14px', fontWeight: '700', marginBottom: '8px' }}>Lưu ý khẩn cấp</h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Tác vụ Reset Database sẽ xóa toàn bộ lịch sử chạy của AI Agent, các đề xuất thư nháp và khôi phục lại 200 SKU cùng dữ liệu giá so sánh giả lập ban đầu.
-              </p>
-            </div>
+            <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Nạp danh sách sản phẩm thật của Ban tổ chức vào hệ thống. Tệp tin cần chứa các cột: 
+              <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--bg-input)', padding: '2px 4px', borderRadius: '4px', marginLeft: '4px' }}>
+                barcode, name, category, guardian_price, cost_price
+              </code>
+            </p>
+
+            <form onSubmit={handleUploadCsv} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                id="csv-file-input"
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="form-control"
+                style={{ padding: '8px 12px' }}
+              />
+              <button 
+                type="submit" 
+                className="btn btn-accent" 
+                style={{ alignSelf: 'flex-start' }}
+                disabled={uploading}
+              >
+                {uploading ? 'Đang tải lên...' : 'Tải lên & Khởi tạo CSDL'}
+              </button>
+            </form>
           </div>
 
-          <button 
-            className="btn btn-secondary" 
-            style={{ borderColor: 'var(--danger)', color: 'var(--danger)', marginTop: '24px', alignSelf: 'flex-start' }}
-            onClick={handleResetDatabase}
-            disabled={seeding}
-          >
-            <RefreshCw size={16} className={seeding ? 'spin' : ''} />
-            {seeding ? 'Đang Reset CSDL...' : 'Reset & Re-seed Database'}
-          </button>
+          {/* Reset System Card */}
+          <div className="section-card glass" style={{ padding: '28px' }}>
+            <div className="section-header" style={{ marginBottom: '16px' }}>
+              <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
+                <AlertCircle size={18} />
+                Tái lập Hệ thống
+              </div>
+            </div>
+
+            <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Xóa sạch cơ sở dữ liệu hiện tại và tải lại 200 SKU giả lập mẫu ban đầu phục vụ cho demo thuyết trình.
+            </p>
+
+            <button 
+              className="btn btn-secondary" 
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+              onClick={handleResetDatabase}
+              disabled={seeding}
+            >
+              <RefreshCw size={16} className={seeding ? 'spin' : ''} />
+              {seeding ? 'Đang Reset CSDL...' : 'Reset & Re-seed CSDL mẫu'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
