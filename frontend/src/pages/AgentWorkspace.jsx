@@ -102,6 +102,26 @@ function AgentWorkspace() {
     }
   }
 
+  const handleApproveAction = async (actionId) => {
+    try {
+      await axios.post(`${API_BASE_URL}/agent/actions/${actionId}/approve`)
+      alert('Đã phê duyệt hành động khớp giá thành công! Giá của Guardian đã được đồng bộ.')
+      fetchHistory()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Lỗi khi phê duyệt hành động.')
+    }
+  }
+
+  const handleRejectAction = async (actionId) => {
+    try {
+      await axios.post(`${API_BASE_URL}/agent/actions/${actionId}/reject`)
+      alert('Đã từ chối hành động. Cảnh báo đã được đóng.')
+      fetchHistory()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Lỗi khi từ chối hành động.')
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -184,7 +204,20 @@ function AgentWorkspace() {
                         {new Date(act.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                    <p className="action-card-desc" style={{ color: 'var(--text-main)', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0' }}>
+                      <span className={`action-status-badge ${act.status.toLowerCase()}`} style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        background: act.status === 'Pending' ? 'rgba(245, 158, 11, 0.1)' : act.status === 'Approved' ? 'rgba(16, 185, 129, 0.1)' : act.status === 'Rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(107, 114, 128, 0.1)',
+                        color: act.status === 'Pending' ? '#f59e0b' : act.status === 'Approved' ? '#10b981' : act.status === 'Rejected' ? '#ef4444' : '#9ca3af'
+                      }}>
+                        {act.status === 'Pending' ? 'Chờ Duyệt' : act.status === 'Approved' ? 'Đã Duyệt' : act.status === 'Rejected' ? 'Từ Chối' : 'Đã Chạy'}
+                      </span>
+                    </div>
+                    <p className="action-card-desc" style={{ color: 'var(--text-main)', fontSize: '13px', marginTop: '6px' }}>
                       {act.description}
                     </p>
                     {act.action_type === 'SUPPLIER_EMAIL_DRAFT' && (
@@ -195,6 +228,24 @@ function AgentWorkspace() {
                         <Mail size={12} />
                         Xem Thư Đề Xuất
                       </button>
+                    )}
+                    {act.status === 'Pending' && act.action_type === 'AUTO_PRICE_MATCH' && (
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        <button 
+                          className="btn btn-accent" 
+                          style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '4px', background: 'var(--primary)', color: '#0f172a' }}
+                          onClick={() => handleApproveAction(act.id)}
+                        >
+                          Duyệt Khớp Giá
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '4px', borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                          onClick={() => handleRejectAction(act.id)}
+                        >
+                          Từ Chối
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))

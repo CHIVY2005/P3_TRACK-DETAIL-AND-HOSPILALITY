@@ -98,3 +98,84 @@ def get_agent_task(task_id: int, db: Session = Depends(get_db)):
 @router.get("/actions", response_model=List[schemas.AgentAction])
 def list_agent_actions(limit: int = 100, db: Session = Depends(get_db)):
     return db.query(models.AgentAction).order_by(models.AgentAction.created_at.desc()).limit(limit).all()
+
+@router.post("/actions/{action_id}/approve")
+def approve_agent_action(action_id: int, db: Session = Depends(get_db)):
+    action = db.query(models.AgentAction).filter(models.AgentAction.id == action_id).first()
+    if not action:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent action with id {action_id} not found"
+        )
+        
+    if action.status != "Pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Action has already been {action.status.lower()}"
+        )
+        
+    try:
+        # Update action status
+        action.status = "Approved"
+        
+        # If it is a price match, apply the price to the product
+        if action.action_type == "AUTO_PRICE_MATCH":
+            import json
+            payload = json.loads(action.data)
+            new_price = payload.get("new_price")
+            
+            product = db.query(models.Product).filter(models.Product.id == action.product_id).first()
+            if product and new_price:
+                product.guardian_price = float(new_price)
+                
+            # Resolve related unresolved alerts for this product
+            unresolved_alerts = db.query(models.Alert).filter(
+                models.Alert.product_id == action.product_id,
+                models.Alert.is_resolved == False
+            ).all()
+            for alert in unresolved_alerts:
+                alert.is_resolved = True
+                
+        db.commit()
+        return {"status": "success", "message": f"Action approved and executed successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing approval: {str(e)}"
+        )
+
+@router.post("/actions/{action_id}/reject")
+def reject_agent_action(action_id: int, db: Session = Depends(get_db)):
+    action = db.query(models.AgentAction).filter(models.AgentAction.id == action_id).first()
+    if not action:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent action with id {action_id} not found"
+        )
+        
+    if action.status != "Pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Action has already been {action.status.lower()}"
+        )
+        
+    try:
+        action.status = "Rejected"
+        
+        # Resolve related unresolved alerts since the user decided not to act on them
+        unresolved_alerts = db.query(models.Alert).filter(
+            models.Alert.product_id == action.product_id,
+            models.Alert.is_resolved == False
+        ).all()
+        for alert in unresolved_alerts:
+            alert.is_resolved = True
+            
+        db.commit()
+        return {"status": "success", "message": f"Action rejected and alert dismissed."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing rejection: {str(e)}"
+        )

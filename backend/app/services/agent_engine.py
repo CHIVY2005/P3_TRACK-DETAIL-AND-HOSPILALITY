@@ -294,11 +294,9 @@ def run_langgraph_agent_for_alert(db: Session, alert: models.Alert) -> Dict[str,
         # Run graph
         final_state = app_graph.invoke(initial_state)
         
-        # Apply pricing updates to DB if match was decided
-        if final_state["strategy"] == "match":
-            product.guardian_price = latest_price.net_price
-            alert.is_resolved = True
-            db.commit()
+        # Price updates are now deferred to Human-in-the-loop approval.
+        # We do not modify the database here.
+        pass
             
         return final_state
         
@@ -309,8 +307,7 @@ def run_langgraph_agent_for_alert(db: Session, alert: models.Alert) -> Dict[str,
         s = node_determine_strategy(s)
         if s["strategy"] == "match":
             s = node_apply_auto_match(s)
-            product.guardian_price = latest_price.net_price
-            alert.is_resolved = True
+            # Defer actual price change to user approval
         else:
             s = node_draft_supplier_negotiation(s)
         db.commit()
@@ -358,6 +355,7 @@ def run_agentic_optimization_loop(db: Session) -> models.AgentTask:
                     product_id=alert.product_id,
                     action_type=act["action_type"],
                     description=act["description"],
+                    status="Pending" if act["action_type"] == "AUTO_PRICE_MATCH" else "Executed",
                     data=act["data"]
                 )
                 db.add(action_record)

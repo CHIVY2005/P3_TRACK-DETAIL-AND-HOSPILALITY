@@ -142,7 +142,7 @@ function Overview() {
             <div className="kpi-value" style={{ color: 'var(--success)' }}>
               {stats.underpriced_sku} SKU
             </div>
-            <div className="kpi-desc">Rẻ hơn đối thủ đáng kể (>10%)</div>
+            <div className="kpi-desc">Rẻ hơn đối thủ đáng kể (&gt;10%)</div>
           </div>
 
           <div className="kpi-card overprice glass">
@@ -153,7 +153,7 @@ function Overview() {
             <div className="kpi-value" style={{ color: 'var(--warning)' }}>
               {stats.overpriced_sku} SKU
             </div>
-            <div className="kpi-desc">Đắt hơn đối thủ đáng kể (>10%)</div>
+            <div className="kpi-desc">Đắt hơn đối thủ đáng kể (&gt;10%)</div>
           </div>
 
           <div className="kpi-card alerts glass">

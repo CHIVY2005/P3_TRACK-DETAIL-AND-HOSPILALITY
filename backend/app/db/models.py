@@ -90,6 +90,7 @@ class AgentAction(Base):
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     action_type = Column(String(100), nullable=False) # AUTO_PRICE_MATCH, SUPPLIER_EMAIL_DRAFT, etc.
     description = Column(Text, nullable=False)
+    status = Column(String(50), default="Pending", nullable=False) # Pending, Approved, Rejected, Executed
     data = Column(Text, nullable=True) # Extra data like email text or raw values
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

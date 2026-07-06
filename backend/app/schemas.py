@@ -103,6 +103,7 @@ class OverviewStats(BaseModel):
 class AgentActionBase(BaseModel):
     action_type: str
     description: str
+    status: str = "Pending"
     data: Optional[str] = None
 
 class AgentAction(AgentActionBase):
