@@ -29,8 +29,8 @@ def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
         avg_price = product.guardian_price
         recommendation = "Maintain Price"
     else:
-        # Filter out competitors that are OUT_OF_STOCK or have no net_price
-        in_stock_prices = [item.net_price for item in latest_prices if item.stock_status != "OUT_OF_STOCK" and item.net_price is not None]
+        # Filter out competitors that are OUT_OF_STOCK, have no net_price, or are marked suspicious
+        in_stock_prices = [item.net_price for item in latest_prices if item.stock_status != "OUT_OF_STOCK" and item.net_price is not None and not item.is_suspicious]
         
         if in_stock_prices:
             avg_price = sum(in_stock_prices) / len(in_stock_prices)
@@ -101,7 +101,7 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
 
     # Competitor-specific severe undercutting alerts
     for cp in latest_prices:
-        if cp.stock_status == "OUT_OF_STOCK" or cp.net_price is None:
+        if cp.stock_status == "OUT_OF_STOCK" or cp.net_price is None or cp.is_suspicious:
             continue
         # If competitor is much cheaper than Guardian
         if product.guardian_price > 0:
@@ -122,3 +122,35 @@ def calculate_all_cpi(db: Session):
     products = db.query(Product).all()
     for product in products:
         calculate_cpi_for_product(db, product.id)
+
+def check_price_anomaly(db: Session, product_id: int, competitor_name: str, new_net_price: float) -> bool:
+    """
+    Compares the newly scraped price against the historical average net price for this competitor and product.
+    If the price deviates by more than 50% from the historical average, it is marked as suspicious.
+    """
+    if new_net_price is None or new_net_price <= 0:
+        return False
+        
+    # Get last 10 non-suspicious historical prices for this competitor and product
+    history = db.query(CompetitorPrice).filter(
+        CompetitorPrice.product_id == product_id,
+        CompetitorPrice.competitor_name == competitor_name,
+        CompetitorPrice.is_suspicious == False,
+        CompetitorPrice.net_price.isnot(None)
+    ).order_by(CompetitorPrice.scraped_at.desc()).limit(10).all()
+    
+    if not history:
+        return False # No history to compare against, trust the new price
+        
+    # Calculate historical average
+    avg_history_price = sum(item.net_price for item in history) / len(history)
+    
+    if avg_history_price <= 0:
+        return False
+        
+    # Check for anomaly (deviation > 50% down or > 50% up)
+    deviation = abs(new_net_price - avg_history_price) / avg_history_price
+    if deviation > 0.50:
+        return True # Anomaly detected!
+        
+    return False

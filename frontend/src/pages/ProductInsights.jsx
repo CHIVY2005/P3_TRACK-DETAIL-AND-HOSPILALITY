@@ -216,17 +216,18 @@ function ProductInsights() {
                       {productDetail.competitor_prices && 
                        productDetail.competitor_prices.slice(0, 5).map(cp => {
                          const isOos = cp.stock_status === 'OUT_OF_STOCK' || cp.net_price === null;
-                         const diff = isOos ? null : cp.net_price - productDetail.guardian_price;
-                         const diffPct = isOos ? null : (diff / productDetail.guardian_price) * 100;
+                         const isSuspicious = cp.is_suspicious;
+                         const diff = (isOos || isSuspicious) ? null : cp.net_price - productDetail.guardian_price;
+                         const diffPct = (isOos || isSuspicious) ? null : (diff / productDetail.guardian_price) * 100;
                          return (
-                           <tr key={cp.id}>
+                           <tr key={cp.id} style={{ opacity: isSuspicious ? 0.75 : 1 }}>
                              <td>
                                <span className={`competitor-dot ${cp.competitor_name.toLowerCase().replace(' ', '')}`} style={{ display: 'inline-flex', marginRight: '8px', cursor: 'default' }}>
                                  {cp.competitor_name[0]}
                                </span>
                                <strong>{cp.competitor_name}</strong>
                              </td>
-                             <td>{isOos ? '-' : `${cp.raw_price.toLocaleString()}đ`}</td>
+                             <td>{isOos ? '-' : (isSuspicious ? <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{cp.raw_price.toLocaleString()}đ</span> : `${cp.raw_price.toLocaleString()}đ`)}</td>
                              <td>{isOos ? '-' : (cp.discount > 0 ? `${cp.discount.toLocaleString()}đ` : '-')}</td>
                              <td><span style={{ color: 'var(--primary)' }}>{isOos ? '-' : (cp.voucher_details || '-')}</span></td>
                              <td>{isOos ? '-' : (cp.promo_mechanics || '-')}</td>
@@ -235,12 +236,17 @@ function ProductInsights() {
                                  <span className="badge badge-danger" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
                                    HẾT HÀNG (OOS)
                                  </span>
+                               ) : isSuspicious ? (
+                                 <span className="badge badge-warning" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                   BẤT THƯỜNG (ISOLATED)
+                                 </span>
                                ) : (
                                  <strong>{cp.net_price.toLocaleString()}đ</strong>
                                )}
                              </td>
-                             <td style={{ color: isOos ? '#10b981' : (diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--text-muted)'), fontWeight: '600' }}>
+                             <td style={{ color: isOos ? '#10b981' : isSuspicious ? '#f59e0b' : (diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--text-muted)'), fontWeight: '600' }}>
                                {isOos ? 'N/A (Lợi thế kho)' : 
+                                isSuspicious ? 'Bị cô lập (Lọc nhiễu)' :
                                 (diff > 0 ? `+${diff.toLocaleString()}đ (+${Math.round(diffPct)}%)` : 
                                  diff < 0 ? `${diff.toLocaleString()}đ (${Math.round(diffPct)}%)` : 
                                  'Bằng giá')}

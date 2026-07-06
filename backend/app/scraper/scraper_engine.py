@@ -161,6 +161,7 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
         "raw_price": raw_price,
         "net_price": net_price,
         "discount": discount_amount,
+        "stock_status": "IN_STOCK",
         "voucher_details": voucher,
         "promo_mechanics": promo,
         "url": url
@@ -192,6 +193,10 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         if not price_data:
             price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode)
 
+        # Check for price anomalies using the historical cross-validation helper
+        from app.services.cpi_calculator import check_price_anomaly
+        is_suspicious = check_price_anomaly(db, product.id, competitor, price_data["net_price"])
+
         # Write to DB
         price_record = models.CompetitorPrice(
             product_id=product.id,
@@ -199,6 +204,8 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
             raw_price=price_data["raw_price"],
             discount=price_data["discount"],
             net_price=price_data["net_price"],
+            stock_status=price_data.get("stock_status", "IN_STOCK"),
+            is_suspicious=is_suspicious,
             voucher_details=price_data["voucher_details"],
             promo_mechanics=price_data["promo_mechanics"],
             url=price_data["url"],

@@ -184,6 +184,8 @@ def create_mock_data():
                 
                 # 10% chance of competitor being OUT_OF_STOCK
                 is_oos = random.random() < 0.10
+                # 5% chance of competitor price being a suspicious outlier (90% drop)
+                is_suspicious = random.random() < 0.05 if not is_oos else False
                 
                 if is_oos:
                     raw_price = None
@@ -192,6 +194,14 @@ def create_mock_data():
                     stock_status = "OUT_OF_STOCK"
                     voucher = None
                     promo = None
+                elif is_suspicious:
+                    # Anomaly drop (90% lower price)
+                    raw_price = round(guardian_price * 0.10, -3)
+                    discount_amount = 0.0
+                    net_price = raw_price
+                    stock_status = "IN_STOCK"
+                    voucher = None
+                    promo = "Honeypot Data / Scraping Bug"
                 else:
                     # Base price calculation
                     raw_price = round(guardian_price * price_factor, -3)
@@ -215,6 +225,7 @@ def create_mock_data():
                     "discount": discount_amount,
                     "net_price": net_price,
                     "stock_status": stock_status,
+                    "is_suspicious": is_suspicious,
                     "voucher_details": voucher,
                     "promo_mechanics": promo,
                     "url": url,
@@ -228,7 +239,7 @@ def create_mock_data():
         writer.writerows(sku_master)
         
     with open("data/competitor_mock.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["product_id", "competitor_name", "raw_price", "discount", "net_price", "stock_status", "voucher_details", "promo_mechanics", "url", "scraped_at"])
+        writer = csv.DictWriter(f, fieldnames=["product_id", "competitor_name", "raw_price", "discount", "net_price", "stock_status", "is_suspicious", "voucher_details", "promo_mechanics", "url", "scraped_at"])
         writer.writeheader()
         writer.writerows(competitor_prices)
         
@@ -287,6 +298,7 @@ def seed_database(sku_master, competitor_prices):
                     discount=cp["discount"],
                     net_price=cp["net_price"],
                     stock_status=cp.get("stock_status", "IN_STOCK"),
+                    is_suspicious=cp.get("is_suspicious", False),
                     voucher_details=cp["voucher_details"],
                     promo_mechanics=cp["promo_mechanics"],
                     url=cp["url"],

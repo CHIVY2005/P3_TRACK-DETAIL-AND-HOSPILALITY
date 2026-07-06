@@ -9,6 +9,7 @@ class CompetitorPriceBase(BaseModel):
     discount: float = 0.0
     net_price: Optional[float] = None
     stock_status: str = "IN_STOCK"
+    is_suspicious: bool = False
     voucher_details: Optional[str] = None
     promo_mechanics: Optional[str] = None
     url: Optional[str] = None
