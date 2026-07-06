@@ -8,7 +8,7 @@ from app.config import settings
 from app.services.cpi_calculator import calculate_cpi_for_product
 
 # List of competitor channels
-COMPETITORS = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity"]
+COMPETITORS = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity", "Hasaki"]
 
 async def scrape_via_apify(barcode: str, competitor_name: str) -> dict:
     """
@@ -111,6 +111,85 @@ async def scrape_via_crawl4ai(barcode: str, competitor_name: str) -> dict:
         
     return None
 
+async def scrape_via_playwright(barcode: str, competitor_name: str) -> dict:
+    """
+    Direct Playwright scraper for Hasaki and TikTok Shop.
+    Launches a headless browser, waits for JS rendering (networkidle),
+    and extracts structured price data.
+    """
+    if competitor_name not in ["Hasaki", "TikTok Shop"]:
+        return None
+        
+    from playwright.async_api import async_playwright
+    import re
+    
+    url = ""
+    if competitor_name == "Hasaki":
+        url = f"https://hasaki.vn/catalogsearch/result/?q={barcode}"
+    elif competitor_name == "TikTok Shop":
+        url = f"https://www.tiktok.com/search?q={barcode}"
+        
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            page = await context.new_page()
+            
+            # Go to page and wait for JS to load
+            await page.goto(url, wait_until="networkidle", timeout=15000)
+            
+            price_element = None
+            raw_price = None
+            
+            if competitor_name == "Hasaki":
+                selectors = [".price_now", ".item_price", ".product-price", ".price"]
+                for sel in selectors:
+                    try:
+                        price_element = await page.query_selector(sel)
+                        if price_element:
+                            price_text = await price_element.inner_text()
+                            digits = re.sub(r"\D", "", price_text)
+                            if digits:
+                                raw_price = float(digits)
+                                break
+                    except Exception:
+                        continue
+            elif competitor_name == "TikTok Shop":
+                selectors = ["div[class*='Price']", "span[class*='Price']", ".price-text"]
+                for sel in selectors:
+                    try:
+                        price_element = await page.query_selector(sel)
+                        if price_element:
+                            price_text = await price_element.inner_text()
+                            digits = re.sub(r"\D", "", price_text)
+                            if digits:
+                                raw_price = float(digits)
+                                break
+                    except Exception:
+                        continue
+                        
+            await browser.close()
+            
+            if raw_price:
+                return {
+                    "raw_price": raw_price,
+                    "net_price": raw_price,
+                    "discount": 0.0,
+                    "stock_status": "IN_STOCK",
+                    "voucher_details": None,
+                    "promo_mechanics": "Playwright Scraped",
+                    "url": url
+                }
+    except Exception as e:
+        print(f"Playwright scraping failed for {competitor_name}: {str(e)}")
+        
+    return None
+
 def simulate_competitor_price(product_guardian_price: float, competitor_name: str, barcode: str) -> dict:
     """
     Fallback simulator pricing logic (runs if API keys are not provided).
@@ -185,7 +264,11 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         if competitor in ["Shopee", "Lazada"]:
             price_data = await scrape_via_apify(product.barcode, competitor)
             
-        # 2. Try Crawl4AI for independent web pages
+        # 2. Try direct Playwright for Hasaki / TikTok Shop
+        if not price_data and competitor in ["Hasaki", "TikTok Shop"]:
+            price_data = await scrape_via_playwright(product.barcode, competitor)
+            
+        # 3. Try Crawl4AI for independent web pages
         if not price_data and competitor in ["Pharmacity", "GrabMart"]:
             price_data = await scrape_via_crawl4ai(product.barcode, competitor)
             

@@ -148,7 +148,7 @@ def create_mock_data():
         })
         
         # 2. Generate Competitor prices (for each competitor, for past 7 days to simulate price history)
-        competitors = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity"]
+        competitors = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity", "Hasaki"]
         
         # We simulate runs for 7 days
         for day_offset in range(6, -1, -1):
@@ -174,6 +174,11 @@ def create_mock_data():
                 elif competitor == "GrabMart":
                     price_factor = random.uniform(0.99, 1.15)
                     discount_pct = 0.0
+                    voucher = None
+                    promo = None
+                elif competitor == "Hasaki":
+                    price_factor = random.uniform(0.90, 1.02)
+                    discount_pct = random.choice([0.0, 0.05])
                     voucher = None
                     promo = None
                 else: # Pharmacity
