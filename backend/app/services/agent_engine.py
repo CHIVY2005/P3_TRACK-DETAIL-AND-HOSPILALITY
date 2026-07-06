@@ -125,7 +125,12 @@ def node_determine_strategy(state: AgentState) -> AgentState:
                 callbacks.append(handler)
                 logs.append("  [Tracing] Đã kích hoạt Langfuse Callback Handler thành công.")
 
-            llm = ChatOpenAI(model="gpt-4o-mini", api_key=openai_key, temperature=0.0)
+            llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                api_key=openai_key,
+                temperature=0.0,
+                request_timeout=8.0
+            )
             
             system_prompt = (
                 "Bạn là chuyên gia cố vấn định giá của Guardian. Nhiệm vụ của bạn là đưa ra chiến lược xử lý alerts.\n"
@@ -145,7 +150,21 @@ def node_determine_strategy(state: AgentState) -> AgentState:
                 config={"callbacks": callbacks} if callbacks else {}
             )
             
-            data = json.loads(response.content)
+            import re
+            content = response.content.strip()
+            if content.startswith("```"):
+                content = re.sub(r"^```(?:json)?\n|```$", "", content, flags=re.MULTILINE).strip()
+            
+            try:
+                data = json.loads(content)
+            except Exception:
+                match_strat = re.search(r'"strategy"\s*:\s*"([^"]+)"', content)
+                match_reason = re.search(r'"reasoning"\s*:\s*"([^"]+)"', content)
+                data = {
+                    "strategy": match_strat.group(1) if match_strat else "negotiate",
+                    "reasoning": match_reason.group(1) if match_reason else "Lập luận trích xuất từ văn bản thô do lỗi định dạng."
+                }
+            
             strategy = data.get("strategy", "negotiate")
             logs.append(f"  [LLM Reasoning] {data.get('reasoning', '')}")
             logs.append(f"  [Decision] Quyết định cuối cùng của LLM: {strategy.upper()}")
