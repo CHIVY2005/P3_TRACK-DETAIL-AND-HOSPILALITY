@@ -4,15 +4,97 @@
 
 ---
 
-## 🚀 Tính Năng Nổi Bật
+## 🚀 Kiến Trúc Hệ Thống & Luồng Công Việc (Workflows)
 
-1.  **Single Source of Truth Database:** Cơ sở dữ liệu SQLite cục bộ được thiết lập sẵn, tự động khởi tạo bảng mà không cần cấu hình phức tạp.
-2.  **Competitor Pricing Index (CPI):** Chỉ số so sánh giá chuẩn hóa ($CPI = \frac{Price_{Guardian}}{Price_{Competitor}} \times 100$) giúp phát hiện sản phẩm bị ép giá hoặc cơ hội tăng giá.
-3.  **Bóc Tách Giá Thực Tế (Net Price):** Xử lý chiết khấu, voucher và cơ chế chạy khuyến mãi để có giá net thực tế của đối thủ.
-4.  **Agentic AI Pricing Optimizer:** Vòng lặp tự động **Perceive (Cảnh báo) -> Reason (Phân tích giá vốn & biên lợi nhuận) -> Act (Thực thi)**:
-    *   *Tool Match Giá:* Tự động giảm giá trên sàn nếu biên lợi nhuận đạt mức an toàn (>15%).
-    *   *Tool Đàm phán:* Soạn sẵn thư điện tử thương lượng giảm giá vốn gửi Supplier nếu biên lợi nhuận bị đe dọa.
-5.  **Dashboard Cao Cấp:** Giao diện tối màu (Premium Dark Mode) trực quan hiển thị biểu đồ xu hướng Recharts và bảng điều khiển logs hoạt động của AI Agent thời gian thực.
+### 1. Sơ Đồ Kiến Trúc MVP (MVP System Architecture)
+Sơ đồ dưới đây mô tả cấu trúc hoạt động của sản phẩm ở mức tối thiểu khả thi (MVP), thể hiện sự phân tách giữa Frontend (React), Backend (FastAPI), Database (PostgreSQL/SQLite), Caching/Broker (Redis) và các worker xử lý nền.
+
+```mermaid
+graph TD
+    User([Commercial Team]) -->|Thao tác & Theo dõi| FE[Frontend: React + Vite]
+    
+    subgraph REST API & WebSockets
+        FE -->|API Requests| BE[Backend: FastAPI]
+        BE -->|Real-time Logs / Stats| FE
+    end
+
+    subgraph Data & Caching Layer
+        BE -->|Read/Write| DB[(Database: PostgreSQL / SQLite)]
+        BE -->|Queue Tasks / Cache| Cache[(Cache & Broker: Redis)]
+    end
+
+    subgraph Background Workers & Core Engines
+        Cache -->|Triggers Scrape| Scraper[Scraper Engine]
+        Cache -->|Triggers Agent| Agent[LangGraph AI Agent]
+    end
+
+    Scraper -->|Scraped Data| DB
+    Agent -->|Execute Actions / Logs| DB
+```
+
+---
+
+### 2. Luồng Phối Hợp Giữa Các Frameworks AI (Framework Collaboration Workflow)
+Sơ đồ này mô tả cách thức các thư viện và nền tảng AI nâng cao bao gồm **LangGraph, Crawl4AI, Apify, LlamaIndex, OpenAI và Langfuse** phối hợp với nhau trong một vòng lặp tự trị đóng để xử lý chênh lệch giá:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as Category Manager
+    participant SE as Scraper Engine (Apify & Crawl4AI)
+    participant DB as PostgreSQL / SQLite
+    participant LG as LangGraph StateMachine
+    participant LI as LlamaIndex (RAG)
+    participant LLM as OpenAI (GPT-4o-mini)
+    participant LF as Langfuse Observability
+
+    CM->>SE: Kích hoạt quét giá đối thủ
+    Note over SE: Apify chạy Actor (Shopee/Lazada)<br/>Crawl4AI crawl Web (Pharmacity)
+    SE->>DB: Lưu trữ Net Price đối thủ & Cập nhật chỉ số CPI
+    Note over DB: Phát hiện CPI lệch vượt ngưỡng (>10%)<br/>Tự động kích hoạt Cảnh báo (Alert)
+    
+    CM->>LG: Kích hoạt AI Pricing Agent
+    LG->>DB: Truy vấn danh sách cảnh báo & thông tin Giá vốn (Cost Price)
+    
+    Note over LG: Khởi tạo LangGraph State: margin_analysis
+    LG->>LLM: Gửi Prompt suy luận chiến lược (Match giá hay Thương lượng)
+    LLM-->>LF: Tracing vết LLM, đo độ trễ & token
+    LLM-->>LG: Trả về kết quả JSON (strategy: "match" hoặc "negotiate")
+    
+    alt Strategy is MATCH (Biên lợi nhuận >= 15%)
+        LG->>DB: Thực thi khớp giá tự động (adjust_system_price)<br/>Giải quyết cảnh báo (Alert Resolved)
+    else Strategy is NEGOTIATE (Biên lợi nhuận < 15%)
+        LG->>LI: Truy vấn chính sách hỗ trợ hãng (query_supplier_policy_rag)
+        LI->>LI: Tra cứu ngữ nghĩa trong supplier_policies.txt
+        LI-->>LG: Trả về điều khoản hoàn tiền & email liên hệ đại diện hãng
+        LG->>DB: Tạo email thương lượng giá nhập gửi Supplier (SUPPLIER_EMAIL_DRAFT)
+    end
+    
+    LG->>DB: Lưu toàn bộ logs suy nghĩ (Thoughts) & Hành động (Actions)
+    DB-->>CM: Hiển thị Live Terminal & Thư nháp trên Dashboard
+```
+
+---
+
+## 🧠 Vai Trò Của AI Agent Trong Hệ Thống (Agent Roles)
+
+Trong nền tảng **GUARDIAN**, AI Pricing Agent đóng vai trò cốt lõi, thay thế các quy trình nghiệp vụ thủ công phức tạp bằng chuỗi hành vi thông minh tự trị (Autonomous Agentic Workflows):
+
+1.  **Market Observer (Giám sát & Phát hiện Bất thường):**
+    *   *Vai trò:* Theo dõi liên tục biến động giá Net Price của toàn bộ Top 200 SKU trên các kênh Shopee, Lazada, TikTok Shop, GrabMart.
+    *   *Hành vi:* Phát hiện lập tức các hành vi phá giá của đối thủ hoặc cơ hội tăng giá của Guardian khi đối thủ hết hàng/tăng giá, tự động kích hoạt cảnh báo tương ứng với mức độ nghiêm trọng (High, Medium, Low).
+
+2.  **Margin Guardian (Bảo vệ Biên lợi nhuận):**
+    *   *Vai trò:* Là chốt chặn bảo mật an toàn tài chính của doanh nghiệp.
+    *   *Hành vi:* Thay vì tự động giảm giá mù quáng theo đối thủ để cạnh tranh (dẫn đến chiến tranh giá phá hủy biên lợi nhuận), Agent luôn đối chiếu giá đối thủ với **Cost Price (Giá vốn)** của sản phẩm để bảo vệ biên lợi nhuận tối thiểu được quy định trong cấu hình (mặc định là 15%).
+
+3.  **Autonomous Decision-Maker (Quyết định Điều phối):**
+    *   *Vai trò:* Phân tích đa chiều và đưa ra phương án xử lý tối ưu.
+    *   *Hành vi:* Sử dụng các quy tắc nghiệp vụ kết hợp suy luận để phân loại sản phẩm và quyết định: khi nào nên **Auto-Match giá** để chiếm lĩnh thị phần, khi nào nên **Maintain giá** để bảo toàn lợi nhuận, và khi nào nên **Yêu cầu hỗ trợ giá nhập**.
+
+4.  **Supplier Negotiator (Đàm phán viên ảo):**
+    *   *Vai trò:* Hỗ trợ Category Manager soạn thảo đàm phán với nhà cung cấp.
+    *   *Hành vi:* Khi giá bán của đối thủ giảm xuống dưới mức giá vốn an toàn của Guardian, Agent sẽ tự động soạn thảo email đề xuất đàm phán (Purchase Cost Rebates) gửi nhà cung cấp dựa trên thông tin nhà sản xuất của sản phẩm đó, giúp doanh nghiệp đạt được chi phí nhập rẻ hơn mà không cần Category Manager ngồi viết email thủ công cho từng nhà cung cấp.
 
 ---
 
@@ -21,10 +103,10 @@
 ```text
 ├── backend/                  # FastAPI Application
 │   ├── app/
-│   │   ├── db/               # SQLAlchemy Session & Models
+│   │   ├── db/               # SQLAlchemy Session & Models (sqlite/postgres)
 │   │   ├── routes/           # API Endpoints (Products, Alerts, Scraper, Agent)
-│   │   ├── services/         # CPI Calculator, Agent Loop Engine
-│   │   ├── scraper/          # Scraper skeleton & Mock algorithms
+│   │   ├── services/         # CPI Calculator, LangGraph Agent Loop Engine
+│   │   ├── scraper/          # Scraper Engine (Crawl4AI & Apify API client)
 │   │   ├── schemas.py        # Pydantic schemas
 │   │   ├── config.py         # Cấu hình môi trường (SQLite/PostgreSQL)
 │   │   └── main.py           # Entrypoint khởi tạo FastAPI
@@ -62,7 +144,7 @@ python -m venv .venv
 # Trên macOS/Linux:
 source .venv/bin/activate
 
-# 3. Cài đặt các thư viện
+# 3. Cài đặt các thư viện (Đã bao gồm LangGraph, Crawl4AI, Apify, LlamaIndex, Langfuse)
 pip install -r backend/requirements.txt
 
 # 4. Tạo dữ liệu giả lập & Seed vào Database SQLite (guardian.db)
@@ -89,39 +171,3 @@ Bạn có thể kiểm tra xem các API có hoạt động đúng không bằng 
 ```bash
 python scripts/test_backend.py
 ```
-
----
-
-## 🤖 Cách Hoạt Động của AI Agent (Vòng Lặp Độc Lập)
-
-Khi Category Manager bấm **"Kích hoạt Pricing Agent"** từ giao diện:
-1.  Agent quét các `Alert` đang kích hoạt (do giá đối thủ giảm sâu hoặc lệch CPI).
-2.  Với mỗi cảnh báo, Agent tính toán:
-    *   Gọi tool `calculate_margin()` để xem mức biên lợi nhuận của sản phẩm dựa trên **Cost Price (Giá vốn)**.
-3.  Ra quyết định:
-    *   *Mức biên đạt ngưỡng an toàn (>=15%):* Tự động điều chỉnh giá Guardian xuống ngang đối thủ (`adjust_system_price()`) và giải quyết cảnh báo (`is_resolved=True`).
-    *   *Mức biên rớt dưới ngưỡng an toàn (<15%):* Dừng giảm giá, gọi tool `generate_supplier_negotiation_draft()` để soạn sẵn email gửi Supplier yêu cầu giảm giá nhập.
-4.  Logs chi tiết luồng suy nghĩ (Thoughts), quan sát (Observations) và hành động (Actions) được đẩy lên Dashboard dạng Terminal trực quan.
-
----
-
-## 🧠 Vai Trò Của AI Agent Trong Hệ Thống (Agent Roles)
-
-Trong nền tảng **GUARDIAN**, AI Pricing Agent đóng vai trò cốt lõi, thay thế các quy trình nghiệp vụ thủ công phức tạp bằng chuỗi hành vi thông minh tự trị (Autonomous Agentic Workflows):
-
-1.  **Market Observer (Giám sát & Phát hiện Bất thường):**
-    *   *Vai trò:* Theo dõi liên tục biến động giá Net Price của toàn bộ Top 200 SKU trên các kênh Shopee, Lazada, TikTok Shop, GrabMart.
-    *   *Hành vi:* Phát hiện lập tức các hành vi phá giá của đối thủ hoặc cơ hội tăng giá của Guardian khi đối thủ hết hàng/tăng giá, tự động kích hoạt cảnh báo tương ứng với mức độ nghiêm trọng (High, Medium, Low).
-
-2.  **Margin Guardian (Bảo vệ Biên lợi nhuận):**
-    *   *Vai trò:* Là chốt chặn bảo mật an toàn tài chính của doanh nghiệp.
-    *   *Hành vi:* Thay vì tự động giảm giá mù quáng theo đối thủ để cạnh tranh (dẫn đến chiến tranh giá phá hủy biên lợi nhuận), Agent luôn đối chiếu giá đối thủ với **Cost Price (Giá vốn)** của sản phẩm để bảo vệ biên lợi nhuận tối thiểu được quy định trong cấu hình (mặc định là 15%).
-
-3.  **Autonomous Decision-Maker (Quyết định Điều phối):**
-    *   *Vai trò:* Phân tích đa chiều và đưa ra phương án xử lý tối ưu.
-    *   *Hành vi:* Sử dụng các quy tắc nghiệp vụ kết hợp suy luận để phân loại sản phẩm và quyết định: khi nào nên **Auto-Match giá** để chiếm lĩnh thị phần, khi nào nên **Maintain giá** để bảo toàn lợi nhuận, và khi nào nên **Yêu cầu hỗ trợ giá nhập**.
-
-4.  **Supplier Negotiator (Đàm phán viên ảo):**
-    *   *Vai trò:* Hỗ trợ Category Manager soạn thảo đàm phán với nhà cung cấp.
-    *   *Hành vi:* Khi giá bán của đối thủ giảm xuống dưới mức giá vốn an toàn của Guardian, Agent sẽ tự động soạn thảo email đề xuất đàm phán (Purchase Cost Rebates) gửi nhà cung cấp dựa trên thông tin nhà sản xuất của sản phẩm đó, giúp doanh nghiệp đạt được chi phí nhập rẻ hơn mà không cần Category Manager ngồi viết email thủ công cho từng nhà cung cấp.
-
