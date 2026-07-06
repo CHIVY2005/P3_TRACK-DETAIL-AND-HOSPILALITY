@@ -5,7 +5,7 @@ from app.db.session import Base
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     barcode = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(255), index=True, nullable=False)
     category = Column(String(100), index=True, nullable=False)
@@ -25,7 +25,7 @@ class Product(Base):
 class CompetitorPrice(Base):
     __tablename__ = "competitor_prices"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     competitor_name = Column(String(100), index=True, nullable=False)  # Shopee, Lazada, TikTok Shop, etc.
     raw_price = Column(Float, nullable=False)
@@ -43,7 +43,7 @@ class CompetitorPrice(Base):
 class PricingIndex(Base):
     __tablename__ = "pricing_indices"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     competitor_index = Column(Float, nullable=False)  # CPI: (Guardian / Avg Competitor) * 100
     average_competitor_price = Column(Float, nullable=False)
@@ -57,7 +57,7 @@ class PricingIndex(Base):
 class Alert(Base):
     __tablename__ = "alerts"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     alert_type = Column(String(50), nullable=False)  # Underpriced, Overpriced, Promo Active
     message = Column(Text, nullable=False)
@@ -72,7 +72,7 @@ class Alert(Base):
 class AgentTask(Base):
     __tablename__ = "agent_tasks"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     objective = Column(String(255), nullable=False)
     status = Column(String(50), default="Pending", nullable=False) # Pending, Running, Completed, Failed
     logs = Column(Text, nullable=True) # Thoughts and observations
@@ -85,7 +85,7 @@ class AgentTask(Base):
 class AgentAction(Base):
     __tablename__ = "agent_actions"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("agent_tasks.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
     action_type = Column(String(100), nullable=False) # AUTO_PRICE_MATCH, SUPPLIER_EMAIL_DRAFT, etc.

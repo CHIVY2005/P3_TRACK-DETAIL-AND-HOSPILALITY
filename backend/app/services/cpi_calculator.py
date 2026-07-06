@@ -95,7 +95,10 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
     # Competitor-specific severe undercutting alerts
     for cp in latest_prices:
         # If competitor is much cheaper than Guardian
-        cheaper_ratio = (product.guardian_price - cp.net_price) / product.guardian_price
+        if product.guardian_price > 0:
+            cheaper_ratio = (product.guardian_price - cp.net_price) / product.guardian_price
+        else:
+            cheaper_ratio = 0.0
         if cheaper_ratio > settings.ALERT_UNDERPRICE_THRESHOLD:
             db.add(Alert(
                 product_id=product.id,
