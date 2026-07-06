@@ -58,3 +58,28 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
 settings = Settings()
+
+import json
+
+def get_agent_config() -> dict:
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(backend_dir, "data", "config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "underprice_threshold": 0.10,
+        "overprice_threshold": 0.10,
+        "min_margin": 0.15,
+        "custom_instruction": "Tối ưu hóa biên lợi nhuận đồng thời duy trì khả năng cạnh tranh cao ở kênh Shopee."
+    }
+
+def save_agent_config(config_data: dict):
+    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(backend_dir, "data", "config.json")
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config_data, f, ensure_ascii=False, indent=2)

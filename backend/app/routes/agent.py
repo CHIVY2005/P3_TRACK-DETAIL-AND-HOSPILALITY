@@ -179,3 +179,14 @@ def reject_agent_action(action_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing rejection: {str(e)}"
         )
+
+@router.get("/config", response_model=schemas.AgentConfig)
+def get_config():
+    from app.config import get_agent_config
+    return get_agent_config()
+
+@router.post("/config")
+def save_config(config: schemas.AgentConfig):
+    from app.config import save_agent_config
+    save_agent_config(config.model_dump())
+    return {"status": "success", "message": "Configuration saved successfully."}

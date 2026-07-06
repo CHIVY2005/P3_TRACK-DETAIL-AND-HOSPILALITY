@@ -131,3 +131,9 @@ class AgentTask(AgentTaskBase):
     class Config:
         from_attributes = True
 
+class AgentConfig(BaseModel):
+    underprice_threshold: float
+    overprice_threshold: float
+    min_margin: float
+    custom_instruction: str
+

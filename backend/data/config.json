@@ -1,0 +1,6 @@
+{
+  "underprice_threshold": 0.10,
+  "overprice_threshold": 0.10,
+  "min_margin": 0.15,
+  "custom_instruction": "Tối ưu hóa biên lợi nhuận đồng thời duy trì khả năng cạnh tranh cao ở kênh Shopee."
+}

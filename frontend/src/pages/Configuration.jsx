@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_BASE_URL } from '../App.jsx'
 import { Save, RefreshCw, Sliders, Play, AlertCircle } from 'lucide-react'
@@ -7,18 +7,44 @@ function Configuration() {
   const [underpriceThreshold, setUnderpriceThreshold] = useState(10)
   const [overpriceThreshold, setOverpriceThreshold] = useState(10)
   const [minMargin, setMinMargin] = useState(15)
+  const [customInstruction, setCustomInstruction] = useState('')
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [csvFile, setCsvFile] = useState(null)
   const [uploading, setUploading] = useState(false)
 
-  const handleSaveConfig = (e) => {
+  // Fetch config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/agent/config`)
+        setUnderpriceThreshold(Math.round(res.data.underprice_threshold * 100))
+        setOverpriceThreshold(Math.round(res.data.overprice_threshold * 100))
+        setMinMargin(Math.round(res.data.min_margin * 100))
+        setCustomInstruction(res.data.custom_instruction || '')
+      } catch (err) {
+        console.error('Error loading config', err)
+      }
+    }
+    fetchConfig()
+  }, [])
+
+  const handleSaveConfig = async (e) => {
     e.preventDefault()
-    setLoading(true)
-    setTimeout(() => {
+    try {
+      setLoading(true)
+      await axios.post(`${API_BASE_URL}/agent/config`, {
+        underprice_threshold: underpriceThreshold / 100.0,
+        overprice_threshold: overpriceThreshold / 100.0,
+        min_margin: minMargin / 100.0,
+        custom_instruction: customInstruction
+      })
+      alert('Đã lưu cấu hình tham số AI Agent & Chỉ số Cảnh báo thành công persistent!')
+    } catch (err) {
+      alert('Không thể lưu cấu hình.')
+    } finally {
       setLoading(false)
-      alert('Đã lưu cấu hình tham số AI Agent & Chỉ số Cảnh báo thành công!')
-    }, 800)
+    }
   }
 
   const handleFileChange = (e) => {
@@ -139,6 +165,20 @@ function Configuration() {
               </div>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
                 Nếu việc giảm giá khớp đối thủ làm biên lợi nhuận rớt dưới {minMargin}%, AI Agent sẽ dừng việc match giá tự động và chuyển sang soạn thư đề xuất đàm phán với Supplier.
+              </span>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '16px' }}>
+              <label>Chỉ thị Tùy chỉnh cho AI Agent (LLM Custom Instruction)</label>
+              <textarea
+                className="form-control"
+                style={{ height: '80px', padding: '10px', resize: 'vertical', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'white', borderRadius: '6px', width: '100%', outline: 'none' }}
+                placeholder="Ví dụ: Ưu tiên bảo vệ biên lợi nhuận cao ở các dòng Skincare và giảm giá cạnh tranh mạnh ở Shopee."
+                value={customInstruction}
+                onChange={(e) => setCustomInstruction(e.target.value)}
+              />
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                Chỉ thị này sẽ được gửi trực tiếp đến OpenAI GPT-4o để tùy biến luồng tư duy đưa ra quyết định của AI Agent.
               </span>
             </div>
 

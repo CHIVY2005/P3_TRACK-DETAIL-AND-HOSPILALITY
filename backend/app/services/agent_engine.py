@@ -85,20 +85,26 @@ def node_determine_strategy(state: AgentState) -> AgentState:
     logs = list(state.get("logs", []))
     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] [Node: determine_strategy] LLM quyết định chiến lược định giá...")
     
+    # Load dynamic config
+    from app.config import get_agent_config
+    cfg = get_agent_config()
+    min_margin = cfg.get("min_margin", 0.15) # stored as decimal, e.g. 0.15 for 15%
+    min_margin_pct = min_margin * 100.0
+    custom_instruction = cfg.get("custom_instruction", "")
+    
     openai_key = os.getenv("OPENAI_API_KEY", "")
     target_margin = state["target_margin"]
-    SAFE_MARGIN_LIMIT = 15.0  # 15% safety limit
     
     # 1. Check if OpenAI API keys are set for Langfuse tracing and LLM decision-making
     if not openai_key or "your_openai" in openai_key:
         # Fallback rule-based reasoning (mock LLM)
         logs.append("  [Reasoning] (Chế độ mô phỏng) Không tìm thấy OpenAI key. Chuyển sang quy tắc nghiệp vụ mặc định.")
-        if target_margin >= SAFE_MARGIN_LIMIT:
+        if target_margin >= min_margin_pct:
             strategy = "match"
-            logs.append(f"  [Decision] Biên lợi nhuận đạt {target_margin:.1f}% >= Ngưỡng an toàn ({SAFE_MARGIN_LIMIT}%). Quyết định: Match giá.")
+            logs.append(f"  [Decision] Biên lợi nhuận đạt {target_margin:.1f}% >= Ngưỡng an toàn ({min_margin_pct:.1f}%). Quyết định: Match giá.")
         else:
             strategy = "negotiate"
-            logs.append(f"  [Decision] Biên lợi nhuận {target_margin:.1f}% < Ngưỡng an toàn ({SAFE_MARGIN_LIMIT}%). Quyết định: Thương lượng giá vốn.")
+            logs.append(f"  [Decision] Biên lợi nhuận {target_margin:.1f}% < Ngưỡng an toàn ({min_margin_pct:.1f}%). Quyết định: Thương lượng giá vốn.")
     else:
         # Real OpenAI Call with Langfuse Tracing
         try:
@@ -124,8 +130,10 @@ def node_determine_strategy(state: AgentState) -> AgentState:
             system_prompt = (
                 "Bạn là chuyên gia cố vấn định giá của Guardian. Nhiệm vụ của bạn là đưa ra chiến lược xử lý alerts.\n"
                 "Quy tắc:\n"
-                "- Nếu biên lợi nhuận ròng (target_margin) >= 15%, trả về chiến lược 'match' để giữ thị phần.\n"
-                "- Nếu target_margin < 15%, trả về 'negotiate' để đàm phán giảm giá vốn.\n"
+                f"- Nếu biên lợi nhuận ròng (target_margin) >= {min_margin_pct:.1f}%, trả về chiến lược 'match' để giữ thị phần.\n"
+                f"- Nếu target_margin < {min_margin_pct:.1f}%, trả về 'negotiate' để đàm phán giảm giá vốn.\n"
+                f"Chỉ thị tùy chỉnh từ Category Manager:\n"
+                f"\"{custom_instruction}\"\n"
                 "- Trả về định dạng JSON: {\"strategy\": \"match\" | \"negotiate\", \"reasoning\": \"lý do suy luận\"}"
             )
             
@@ -143,7 +151,7 @@ def node_determine_strategy(state: AgentState) -> AgentState:
             logs.append(f"  [Decision] Quyết định cuối cùng của LLM: {strategy.upper()}")
         except Exception as e:
             logs.append(f"  [Warning] Lỗi khi gọi OpenAI/Langfuse: {e}. Sử dụng fallback.")
-            strategy = "match" if target_margin >= SAFE_MARGIN_LIMIT else "negotiate"
+            strategy = "match" if target_margin >= min_margin_pct else "negotiate"
 
     state["strategy"] = strategy
     state["logs"] = logs

@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.models import Product, CompetitorPrice, PricingIndex, Alert
-from app.config import settings
+from app.config import settings, get_agent_config
 
 def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
     # 1. Fetch product
@@ -40,8 +40,9 @@ def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
                 cpi = 100.0
             
             # Determine recommendation based on thresholds
-            overprice_limit = 100.0 * (1.0 + settings.ALERT_OVERPRICE_THRESHOLD)
-            underprice_limit = 100.0 * (1.0 - settings.ALERT_UNDERPRICE_THRESHOLD)
+            cfg = get_agent_config()
+            overprice_limit = 100.0 * (1.0 + cfg.get("overprice_threshold", 0.10))
+            underprice_limit = 100.0 * (1.0 - cfg.get("underprice_threshold", 0.10))
 
             if cpi > overprice_limit:
                 recommendation = "Lower Price"
@@ -78,8 +79,11 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
     db.query(Alert).filter(Alert.product_id == product.id, Alert.is_resolved == False).delete()
     db.commit()
 
-    overprice_limit = 100.0 * (1.0 + settings.ALERT_OVERPRICE_THRESHOLD)
-    underprice_limit = 100.0 * (1.0 - settings.ALERT_UNDERPRICE_THRESHOLD)
+    cfg = get_agent_config()
+    underprice_threshold = cfg.get("underprice_threshold", 0.10)
+    overprice_threshold = cfg.get("overprice_threshold", 0.10)
+    overprice_limit = 100.0 * (1.0 + overprice_threshold)
+    underprice_limit = 100.0 * (1.0 - underprice_threshold)
 
     # Threshold alerts based on overall CPI
     if cpi > overprice_limit:
@@ -108,7 +112,7 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
             cheaper_ratio = (product.guardian_price - cp.net_price) / product.guardian_price
         else:
             cheaper_ratio = 0.0
-        if cheaper_ratio > settings.ALERT_UNDERPRICE_THRESHOLD:
+        if cheaper_ratio > underprice_threshold:
             db.add(Alert(
                 product_id=product.id,
                 alert_type="Competitor Undercutting",
