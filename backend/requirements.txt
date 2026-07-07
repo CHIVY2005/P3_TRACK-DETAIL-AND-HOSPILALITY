@@ -13,6 +13,7 @@ python-multipart>=0.0.6
 python-dotenv>=1.0.0
 pytest>=7.3.0
 httpx>=0.24.0
+<<<<<<< HEAD
 
 # Advanced AI Integrations
 langgraph>=0.0.10
@@ -22,3 +23,8 @@ apify-client>=1.0.0
 crawl4ai>=0.3.0
 llama-index>=0.10.0
 llama-index-llms-openai>=0.1.0
+=======
+pgvector
+sentence-transformers
+apify-client
+>>>>>>> 395bff1 (update research)
