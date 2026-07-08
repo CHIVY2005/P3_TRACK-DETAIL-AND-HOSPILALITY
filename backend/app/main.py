@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.db.session import engine, Base
+from app.db.session import engine
+from app.db.models import Base
 from app.routes import products, pricing, alerts, scraper, agent, sync
 
 # Create database tables automatically for the hackathon environment.

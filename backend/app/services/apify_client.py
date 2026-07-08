@@ -49,3 +49,7 @@ class ApifyClientService:
             raise
         except Exception as e:
             raise Exception(f"Lỗi không xác định khi chạy scraper: {str(e)}")
+
+def get_apify_service():
+    return ApifyClientService()
+

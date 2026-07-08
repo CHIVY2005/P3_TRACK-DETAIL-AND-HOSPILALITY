@@ -11,11 +11,11 @@ router = APIRouter()
 # In-memory status flag to prevent parallel agent runs
 is_agent_running = False
 
-def run_agent_in_background(db_session: Session):
+def run_agent_in_background(db_session: Session, task_id: int):
     global is_agent_running
     is_agent_running = True
     try:
-        run_agentic_optimization_loop(db_session)
+        run_agentic_optimization_loop(db_session, task_id)
     except Exception as e:
         print(f"Background agent execution failed: {e}")
     finally:
@@ -52,25 +52,8 @@ def trigger_agent_run(background_tasks: BackgroundTasks, db: Session = Depends(g
         is_agent_running = True
         thread_db = SessionLocal()
         try:
-            # Fetch the task record inside thread
-            task_rec = thread_db.query(models.AgentTask).filter(models.AgentTask.id == task_id).first()
-            if task_rec:
-                # Update status to Running
-                task_rec.status = "Running"
-                task_rec.logs = "[Agent Initialized] Starting autonomous competitive pricing sweep...\n"
-                thread_db.commit()
-                
-                # Execute agent loop logic (inlined here or refactored to use existing task)
-                from app.services.agent_engine import run_agentic_optimization_loop
-                # Run the loop using the database session
-                # Let's adjust agent_engine's run_agentic_optimization_loop to accept an existing task or run on it
-                # To make it simple, we can run it and then copy details, or we can just run the function.
-                # Let's clean it up: our run_agentic_optimization_loop creates its own task.
-                # Let's delete the dummy task and let run_agentic_optimization_loop create and return a new one!
-                # Wait, this is even simpler: we just delete the dummy task and run!
-                thread_db.query(models.AgentTask).filter(models.AgentTask.id == task_id).delete()
-                thread_db.commit()
-                run_agentic_optimization_loop(thread_db)
+            from app.services.agent_engine import run_agentic_optimization_loop
+            run_agentic_optimization_loop(thread_db, task_id)
         except Exception as e:
             print(f"Error in background agent task: {e}")
         finally:

@@ -341,15 +341,15 @@ def run_langgraph_agent_for_alert(db: Session, alert: models.Alert) -> Dict[str,
         return s
 
 # Main Agent execution loop triggered by backend routes
-def run_agentic_optimization_loop(db: Session) -> models.AgentTask:
-    task = models.AgentTask(
-        objective="Analyze active price discrepancies, protect profit margins, and optimize competitor index.",
-        status="Running",
-        logs="[Agent Initialized] Starting LangGraph + Langfuse autonomous pricing sweep...\n"
-    )
-    db.add(task)
+def run_agentic_optimization_loop(db: Session, task_id: int) -> models.AgentTask:
+    task = db.query(models.AgentTask).filter(models.AgentTask.id == task_id).first()
+    if not task:
+        print(f"Task ID {task_id} not found in database.")
+        return None
+
+    task.status = "Running"
+    task.logs = "[Agent Initialized] Starting LangGraph + Langfuse autonomous pricing sweep...\n"
     db.commit()
-    db.refresh(task)
 
     logs = [f"[Agent Task ID {task.id} started. Objective: {task.objective}]"]
     

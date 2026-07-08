@@ -6,12 +6,12 @@ from typing import Optional, Dict, Any
 import urllib.parse
 
 from app.database import get_db
-from app.models import SkuMaster, CompetitorLink, PriceHistory
+from app.db.models import SkuMaster, CompetitorLink, PriceHistory
 from app.services.ai_matcher import generate_embeddings
-from app.services.apify_client import ApifyClientService
+from app.services.apify_client import ApifyClientService, get_apify_service
+from app.config import settings
 
 router = APIRouter()
-apify_service = ApifyClientService()
 
 class SyncResponse(BaseModel):
     status: str
@@ -20,7 +20,12 @@ class SyncResponse(BaseModel):
     message: Optional[str] = None
 
 @router.post("/sync-price/{barcode}", response_model=SyncResponse)
-def sync_price(barcode: str, platform: str = "Hasaki", db: Session = Depends(get_db)):
+def sync_price(
+    barcode: str, 
+    platform: str = "Hasaki", 
+    db: Session = Depends(get_db),
+    apify_service: ApifyClientService = Depends(get_apify_service)
+):
     # 1. Query DB: Fetch the product from sku_master using the barcode.
     sku = db.query(SkuMaster).filter(SkuMaster.barcode == barcode).first()
     if not sku:
@@ -38,7 +43,7 @@ def sync_price(barcode: str, platform: str = "Hasaki", db: Session = Depends(get
         # If link exists: Call ApifyClientService with this direct URL to get the price.
         try:
             # We assume a wrapper or the exact signature exists. Passing actor_id as dummy for Hasaki.
-            results = apify_service.run_scraper(actor_id="hasaki-scraper-actor-id", target_url=existing_link.url)
+            results = apify_service.run_scraper(actor_id=settings.HASAKI_SCRAPER_ACTOR_ID, target_url=existing_link.url)
             if results and isinstance(results, list):
                 match = results[0]
         except Exception as e:
@@ -51,7 +56,7 @@ def sync_price(barcode: str, platform: str = "Hasaki", db: Session = Depends(get
         
         # b. Call ApifyClientService to scrape the Top 5 results from this search page
         try:
-            results = apify_service.run_scraper(actor_id="hasaki-search-actor-id", target_url=search_url)
+            results = apify_service.run_scraper(actor_id=settings.HASAKI_SEARCH_ACTOR_ID, target_url=search_url)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")
             
@@ -104,7 +109,8 @@ def sync_price(barcode: str, platform: str = "Hasaki", db: Session = Depends(get
                 barcode=barcode,
                 platform=platform,
                 scraped_price=scraped_price_int,
-                promotion=match.get("promotion", None)
+                promotion=match.get("promotion", None),
+                raw_data=match
             )
             db.add(new_price)
             db.commit()

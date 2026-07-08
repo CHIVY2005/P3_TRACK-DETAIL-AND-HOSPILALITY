@@ -19,15 +19,7 @@ class Settings(BaseSettings):
     # Backwards compatibility / defaults
     ENV: str = "development"
     
-    # Database engine selection
-    USE_SQLITE: bool = True
-    
-    # PostgreSQL Database Config
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
-    DB_NAME: str = "guardian_db"
+    DATABASE_URL: str
     
     # Redis Config
     REDIS_HOST: str = "localhost"
@@ -37,19 +29,14 @@ class Settings(BaseSettings):
     REQUEST_TIMEOUT: int = 15
     MAX_RETRIES: int = 3
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    
+    # Apify Actor IDs
+    HASAKI_SCRAPER_ACTOR_ID: str = "hasaki-scraper-actor-id"
+    HASAKI_SEARCH_ACTOR_ID: str = "hasaki-search-actor-id"
 
     # Pricing Alert Configuration
     ALERT_UNDERPRICE_THRESHOLD: float = 0.10  # 10%
     ALERT_OVERPRICE_THRESHOLD: float = 0.10   # 10%
-
-    @property
-    def sqlalchemy_database_uri(self) -> str:
-        if self.USE_SQLITE:
-            # SQLite path relative to backend app folder
-            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            db_path = os.path.join(backend_dir, "guardian.db")
-            return f"sqlite:///{db_path}"
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def redis_url(self) -> str:

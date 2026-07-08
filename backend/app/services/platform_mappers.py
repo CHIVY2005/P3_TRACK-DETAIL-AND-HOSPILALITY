@@ -1,4 +1,7 @@
 def map_shopee_data(raw_json):
+    if not raw_json or not isinstance(raw_json, list) or len(raw_json) == 0:
+        return None
+        
     # Lấy object đầu tiên trong mảng JSON
     item = raw_json[0] 
     
