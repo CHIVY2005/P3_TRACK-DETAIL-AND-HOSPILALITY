@@ -1,17 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+import re
 import urllib.parse
+from typing import Any, Dict, List, Optional
 
-from app.database import get_db
-from app.db.models import SkuMaster, CompetitorLink, PriceHistory
-from app.services.ai_matcher import generate_embeddings
-from app.services.apify_client import ApifyClientService, get_apify_service
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.config import settings
+from app.db.models import CompetitorLink, PriceHistory, SkuMaster
+from app.db.session import get_db
+from app.services.apify_client import ApifyClientService, get_apify_service
 
 router = APIRouter()
+
 
 class SyncResponse(BaseModel):
     status: str
@@ -19,108 +20,165 @@ class SyncResponse(BaseModel):
     updated_price: Optional[float] = None
     message: Optional[str] = None
 
+
+def parse_price_to_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+
+    if isinstance(value, (int, float)):
+        return int(float(value))
+
+    if isinstance(value, str):
+        digits = re.sub(r"[^\d]", "", value.strip())
+        if digits:
+            return int(digits)
+
+    return None
+
+
+def normalize_scraper_item(raw_item: Dict[str, Any], fallback_platform: str) -> Optional[Dict[str, Any]]:
+    if not raw_item or not isinstance(raw_item, dict):
+        return None
+
+    title = raw_item.get("title") or raw_item.get("name") or raw_item.get("product_title")
+    current_price = parse_price_to_int(
+        raw_item.get("current_price")
+        if raw_item.get("current_price") is not None
+        else raw_item.get("price")
+    )
+    original_price = parse_price_to_int(
+        raw_item.get("original_price")
+        if raw_item.get("original_price") is not None
+        else raw_item.get("price_before_discount")
+    )
+
+    breadcrumbs = raw_item.get("breadcrumb") or raw_item.get("breadcrumbs") or []
+    hierarchy = None
+    if isinstance(breadcrumbs, list) and breadcrumbs:
+        names = [crumb.get("name") for crumb in breadcrumbs if isinstance(crumb, dict) and crumb.get("name")]
+        if names:
+            hierarchy = " > ".join(names)
+
+    if raw_item.get("url"):
+        url = raw_item.get("url")
+    elif isinstance(breadcrumbs, list) and breadcrumbs:
+        last_crumb = breadcrumbs[-1] if isinstance(breadcrumbs[-1], dict) else {}
+        url = last_crumb.get("url")
+    else:
+        item_id = raw_item.get("item_id") or raw_item.get("id") or raw_item.get("sku")
+        shop_id = raw_item.get("shop_id") or raw_item.get("shopid")
+        if item_id and shop_id and fallback_platform.lower() == "shopee":
+            url = f"https://shopee.vn/product/{shop_id}/{item_id}"
+        elif item_id:
+            url = str(item_id)
+        else:
+            url = None
+
+    discount_pct = raw_item.get("discount_pct")
+    promotion = f"Giảm {discount_pct}%" if discount_pct not in (None, "", 0) else None
+
+    sku_platform = raw_item.get("sku_platform") or raw_item.get("item_id") or raw_item.get("id") or raw_item.get("sku")
+
+    normalized = {
+        "platform": raw_item.get("platform") or fallback_platform,
+        "title": title,
+        "current_price": current_price,
+        "original_price": original_price,
+        "promotion": promotion,
+        "sku_platform": str(sku_platform) if sku_platform is not None else None,
+        "hierarchy": hierarchy,
+        "url": url,
+        "stock_status": raw_item.get("stock_status") or raw_item.get("availability"),
+        "rating": raw_item.get("rating") or raw_item.get("rating_star"),
+        "raw_data": raw_item,
+    }
+
+    return normalized if normalized["title"] else None
+
+
+def select_first_valid_match(results: List[Dict[str, Any]], fallback_platform: str) -> Optional[Dict[str, Any]]:
+    for item in results or []:
+        normalized = normalize_scraper_item(item, fallback_platform=fallback_platform)
+        if normalized and normalized.get("current_price") is not None:
+            return normalized
+    return None
+
+
 @router.post("/sync-price/{barcode}", response_model=SyncResponse)
 def sync_price(
-    barcode: str, 
-    platform: str = "Hasaki", 
+    barcode: str,
+    platform: str = "Hasaki",
     db: Session = Depends(get_db),
-    apify_service: ApifyClientService = Depends(get_apify_service)
+    apify_service: ApifyClientService = Depends(get_apify_service),
 ):
-    # 1. Query DB: Fetch the product from sku_master using the barcode.
     sku = db.query(SkuMaster).filter(SkuMaster.barcode == barcode).first()
     if not sku:
         raise HTTPException(status_code=404, detail="Product not found in SkuMaster")
-        
-    # 2. Check Existing Link: Query competitor_links for a specific platform.
-    existing_link = db.query(CompetitorLink).filter(
-        CompetitorLink.barcode == barcode,
-        CompetitorLink.platform == platform
-    ).first()
-    
-    match = None
-    
-    if existing_link:
-        # If link exists: Call ApifyClientService with this direct URL to get the price.
-        try:
-            # We assume a wrapper or the exact signature exists. Passing actor_id as dummy for Hasaki.
-            results = apify_service.run_scraper(actor_id=settings.HASAKI_SCRAPER_ACTOR_ID, target_url=existing_link.url)
-            if results and isinstance(results, list):
-                match = results[0]
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")
-    else:
-        # If link DOES NOT exist (Fallback to AI Search):
-        # a. Construct a search URL based on the product name
-        url_encoded_name = urllib.parse.quote_plus(sku.product_name)
-        search_url = f"https://hasaki.vn/tim-kiem?q={url_encoded_name}"
-        
-        # b. Call ApifyClientService to scrape the Top 5 results from this search page
-        try:
-            results = apify_service.run_scraper(actor_id=settings.HASAKI_SEARCH_ACTOR_ID, target_url=search_url)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")
-            
-        if not results:
-            return {"status": "not_found", "message": "No results found from search"}
-            
-        top_5_results = results[:5]
-        
-        # 3. AI Vector Matching
-        titles = [item.get("title", "") for item in top_5_results]
-        embeddings = generate_embeddings(titles)
-        
-        best_match = None
-        best_score = -1.0
-        
-        for idx, emb in enumerate(embeddings):
-            # Compare embedding against the sku_master.name_embedding using pgvector
-            # 1 - cosine_distance gives the cosine similarity
-            similarity_query = select(1 - SkuMaster.name_embedding.cosine_distance(emb)).where(
-                SkuMaster.barcode == barcode
-            )
-            score = db.scalar(similarity_query)
-            
-            if score is not None and score > best_score:
-                best_score = score
-                best_match = top_5_results[idx]
-        
-        # If the similarity score is above a threshold (e.g., > 0.85)
-        if best_score > 0.85 and best_match:
-            match = best_match
-            
-            # Persist Data: Insert the matched url into the competitor_links table
-            new_link = CompetitorLink(
-                barcode=barcode,
-                platform=platform,
-                url=match.get("url"),
-                platform_item_id=None
-            )
-            db.add(new_link)
-            db.commit()
 
-    if match:
-        price = match.get("price")
-        if price is not None:
-            # Ensure price is integer as per PriceHistory model
-            scraped_price_int = int(float(price))
-            
-            # Persist Data: Insert the parsed price into the price_history table.
-            new_price = PriceHistory(
-                barcode=barcode,
-                platform=platform,
-                scraped_price=scraped_price_int,
-                promotion=match.get("promotion", None),
-                raw_data=match
-            )
-            db.add(new_price)
-            db.commit()
-            
-            return {
-                "status": "success",
-                "matched_product": match,
-                "updated_price": price
-            }
-        else:
-            return {"status": "error", "message": "Matched product does not contain a price."}
+    existing_link = (
+        db.query(CompetitorLink)
+        .filter(CompetitorLink.barcode == barcode, CompetitorLink.platform == platform)
+        .first()
+    )
+
+    if existing_link:
+        target_url = existing_link.url
+        actor_id = settings.HASAKI_SCRAPER_ACTOR_ID
     else:
+        url_encoded_name = urllib.parse.quote_plus(sku.product_name)
+        target_url = f"https://hasaki.vn/tim-kiem?q={url_encoded_name}"
+        actor_id = settings.HASAKI_SEARCH_ACTOR_ID
+
+    try:
+        results = apify_service.run_scraper(actor_id=actor_id, target_url=target_url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scraper error: {str(e)}")
+
+    if not results:
+        return {"status": "not_found", "message": "No results found from scraper"}
+
+    top_results = results[:5] if isinstance(results, list) else []
+    match = select_first_valid_match(top_results, fallback_platform=platform)
+
+    if not match and isinstance(top_results, list):
+        # Last-resort fallback for unusual payload shapes
+        for item in top_results:
+            if isinstance(item, dict):
+                match = normalize_scraper_item(item, fallback_platform=platform)
+                if match:
+                    break
+
+    if not match or match.get("current_price") is None:
         return {"status": "not_found", "message": "No valid match found."}
+
+    price = match.get("current_price")
+    scraped_price_int = parse_price_to_int(price)
+    if scraped_price_int is None:
+        return {"status": "error", "message": "Matched product does not contain a usable price."}
+
+    if not existing_link and match.get("url"):
+        new_link = CompetitorLink(
+            barcode=barcode,
+            platform=platform,
+            url=match.get("url"),
+            platform_item_id=match.get("sku_platform"),
+        )
+        db.add(new_link)
+        db.commit()
+
+    new_price = PriceHistory(
+        barcode=barcode,
+        platform=platform,
+        scraped_price=scraped_price_int,
+        promotion=match.get("promotion"),
+        raw_data=match.get("raw_data"),
+    )
+    db.add(new_price)
+    db.commit()
+
+    return {
+        "status": "success",
+        "matched_product": match,
+        "updated_price": scraped_price_int,
+    }
+

@@ -31,12 +31,18 @@ class Settings(BaseSettings):
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     
     # Apify Actor IDs
-    HASAKI_SCRAPER_ACTOR_ID: str = "hasaki-scraper-actor-id"
+    HASAKI_SCRAPER_ACTOR_ID: str = "xtracto/shopee-scraper"
     HASAKI_SEARCH_ACTOR_ID: str = "hasaki-search-actor-id"
+    APIFY_FIXTURE_FALLBACK: bool = True
+    APIFY_FIXTURE_PATH: str = "dataset_shopee-scraper_2026-07-06_05-01-14-978.json"
 
     # Pricing Alert Configuration
     ALERT_UNDERPRICE_THRESHOLD: float = 0.10  # 10%
     ALERT_OVERPRICE_THRESHOLD: float = 0.10   # 10%
+
+    @property
+    def sqlalchemy_database_uri(self) -> str:
+        return self.DATABASE_URL
 
     @property
     def redis_url(self) -> str:

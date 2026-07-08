@@ -1,11 +1,16 @@
 import sys
 import os
 
+# Avoid Windows console encoding crashes when seeded product names contain
+# Vietnamese characters.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="backslashreplace")
+
 # Ensure the backend directory is in the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.database import engine, SessionLocal
-from app.models import Base, SkuMaster, CompetitorLink
+from app.db.models import Base, SkuMaster, CompetitorLink
 
 from sqlalchemy import text
 

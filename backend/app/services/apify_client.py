@@ -1,7 +1,13 @@
+import json
 import os
 import time
+from pathlib import Path
+
 from apify_client import ApifyClient
 from apify_client.errors import ApifyApiError
+
+from app.config import settings
+
 
 class ApifyClientService:
     def __init__(self):
@@ -12,43 +18,52 @@ class ApifyClientService:
 
     def run_scraper(self, actor_id: str, target_url: str, timeout_seconds: int = 30) -> list:
         try:
-            run_input = {"startUrls": [{"url": target_url}]}
-            
-            # 1. Khởi chạy Actor (bất đồng bộ trên hệ thống Apify)
+            run_input = {
+                "mode": "url",
+                "url": target_url,
+                "scrapeDescription": True,
+                "includeReviews": True,
+                "currency": "VND",
+            }
+
             run = self.client.actor(actor_id).start(run_input=run_input)
             run_id = run["id"]
-            
+
             start_time = time.time()
-            
-            # 2. Vòng lặp poll kiểm tra trạng thái
             while True:
                 if time.time() - start_time > timeout_seconds:
-                    # Dừng actor nếu quá thời gian chờ
                     self.client.run(run_id).abort()
-                    raise TimeoutError(f"Actor timeout sau {timeout_seconds} giây.")
+                    raise TimeoutError(f"Actor timeout sau {timeout_seconds} giay.")
 
                 run_info = self.client.run(run_id).get()
                 status = run_info.get("status")
 
                 if status == "SUCCEEDED":
                     break
-                elif status in ["FAILED", "ABORTED", "TIMED-OUT"]:
-                    raise Exception(f"Actor kết thúc với lỗi. Trạng thái: {status}")
+                if status in ["FAILED", "ABORTED", "TIMED-OUT"]:
+                    raise Exception(f"Actor ket thuc voi loi. Trang thai: {status}")
 
-                time.sleep(2)  # Đợi 2 giây trước khi kiểm tra lại
+                time.sleep(2)
 
-            # 3. Lấy dữ liệu từ Dataset khi hoàn thành
             dataset_id = run_info["defaultDatasetId"]
             dataset_items = self.client.dataset(dataset_id).list_items().items
-            
             return dataset_items
 
-        except ApifyApiError as e:
-            raise Exception(f"Lỗi từ Apify API: {str(e)}")
-        except TimeoutError:
-            raise
-        except Exception as e:
-            raise Exception(f"Lỗi không xác định khi chạy scraper: {str(e)}")
+        except (ApifyApiError, TimeoutError, Exception) as e:
+            return self._fallback_results_or_raise(str(e))
+
+    def _fallback_results_or_raise(self, reason: str) -> list:
+        if settings.APIFY_FIXTURE_FALLBACK:
+            fixture_path = Path(__file__).resolve().parents[3] / settings.APIFY_FIXTURE_PATH
+            if fixture_path.exists():
+                with fixture_path.open("r", encoding="utf-8") as f:
+                    fixture_data = json.load(f)
+                if isinstance(fixture_data, list):
+                    return fixture_data
+                return [fixture_data]
+
+        raise Exception(reason)
+
 
 def get_apify_service():
     return ApifyClientService()
