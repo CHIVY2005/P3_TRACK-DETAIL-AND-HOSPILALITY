@@ -46,10 +46,19 @@ class AlertBase(BaseModel):
     severity: str
     is_resolved: bool
 
+
+class AlertProductRef(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True
+
 class Alert(AlertBase):
     id: int
     product_id: int
     created_at: datetime
+    product: Optional[AlertProductRef] = None
 
     class Config:
         from_attributes = True
@@ -137,3 +146,69 @@ class AgentConfig(BaseModel):
     min_margin: float
     custom_instruction: str
 
+
+class AgentBriefingSummary(BaseModel):
+    monitored_sku: int
+    active_alerts: int
+    high_severity_alerts: int
+    pending_actions: int
+    average_cpi: float
+    channels_covered: int
+    last_scrape_at: Optional[datetime] = None
+
+
+class AgentBriefingChannel(BaseModel):
+    channel: str
+    avg_net_price: float
+    sku_coverage: int
+    alert_count: int
+
+
+class AgentBriefingPriority(BaseModel):
+    alert_id: int
+    product_id: int
+    product_name: str
+    category: str
+    guardian_price: float
+    cost_price: float
+    current_margin_pct: float
+    competitor_name: str
+    competitor_price: float
+    price_gap_pct: float
+    margin_if_matched_pct: float
+    strategy: str
+    recommended_action: str
+    rationale: str
+    severity: str
+    message: str
+    channel_url: Optional[str] = None
+    scraped_at: Optional[datetime] = None
+
+
+class AgentBriefing(BaseModel):
+    summary: AgentBriefingSummary
+    priority_queue: List[AgentBriefingPriority]
+    channel_summary: List[AgentBriefingChannel]
+    latest_task: Optional[AgentTask] = None
+
+
+class ScrapeSampleMatch(BaseModel):
+    product_id: int
+    product_name: str
+    guardian_price: float
+    category: str
+
+
+class ScrapeSample(BaseModel):
+    source: str
+    platform: str
+    kind: str
+    title: str
+    brand: Optional[str] = None
+    current_price: Optional[float] = None
+    original_price: Optional[float] = None
+    discount_pct: Optional[float] = None
+    rating: Optional[float] = None
+    url: Optional[str] = None
+    record_count: int
+    match: Optional[ScrapeSampleMatch] = None

@@ -1,123 +1,271 @@
-# HƯỚNG DẪN CẤU TRÚC BOILERPLATE & BÁO CÁO TÌNH TRẠNG MÃ NGUỒN (TECHNICAL EXPLANATION)
+# TECHNICAL EXPLANATION
 
-Tài liệu này giải thích chi tiết cấu trúc nền tảng của dự án (**Boilerplate**), tình trạng mã nguồn hiện tại, cùng các giải pháp nâng cao đã được tích hợp hoàn chỉnh để phục vụ cho buổi thuyết trình Hackathon.
+Tai lieu nay tap trung vao workflow thuc te cua codebase hien tai, khong theo boilerplate cu.
 
----
+## 1. Workflow overview
 
-## 📂 1. Cấu Trúc Khung Dự Án (Boilerplate Structure)
+Du an co 4 luong chinh:
 
-Bộ mã nguồn được tổ chức theo cấu trúc phân tách rõ ràng giữa **Frontend (React)** và **Backend (FastAPI)**:
+1. Seed demo dataset
+2. Scrape / refresh du lieu gia doi thu
+3. Tinh CPI va tao alerts
+4. Chay AI agent va human approval
 
-```
-P3_TRACK-DETAIL-AND-HOSPILALITY/
-├── backend/                     # Mã nguồn máy chủ FastAPI & AI Agent
-│   ├── app/
-│   │   ├── config.py            # Quản lý tham số môi trường & cấu hình hệ thống
-│   │   ├── db/
-│   │   │   ├── database.py      # Cấu hình kết nối SQLAlchemy (SQLite/PostgreSQL)
-│   │   │   └── models.py        # Các thực thể CSDL (Product, CompetitorPrice, Alert, Action, v.v.)
-│   │   ├── routes/              # Các cổng API REST
-│   │   │   ├── products.py      # Quản lý danh mục sản phẩm, nhập CSV và tính CPI
-│   │   │   ├── scraper.py       # Kích hoạt quét giá và Reset hệ thống
-│   │   │   └── agent.py         # Quản lý hàng đợi phê duyệt hành động (HITL) & Cấu hình AI
-│   │   ├── schemas.py           # Định nghĩa kiểu dữ liệu truyền nhận (Pydantic models)
-│   │   ├── scraper/
-│   │   │   └── scraper_engine.py# Động cơ cào dữ liệu (Apify, Crawl4AI, Playwright & Simulator)
-│   │   └── services/
-│   │       ├── agent_engine.py  # Định nghĩa đồ thị trạng thái LangGraph của AI Agent
-│   │       └── cpi_calculator.py# Thuật toán tính chỉ số CPI & Cảnh báo lệch giá
-│   ├── data/                    # Nơi chứa các nguồn tài liệu tri thức & tệp cấu hình
-│   │   ├── knowledge/
-│   │   │   └── supplier_policies.txt # Tài liệu chính sách đền bù giá nhập (phục vụ RAG)
-│   │   └── config.json          # Tệp lưu trữ tham số cấu hình động của Agent
-│   ├── guardian.db              # Cơ sở dữ liệu SQLite cục bộ phục vụ demo nhanh
-│   └── main.py                  # Điểm khởi chạy ứng dụng FastAPI
-│
-├── frontend/                    # Giao diện người dùng React + Vite
-│   ├── src/
-│   │   ├── components/          # Các component giao diện dùng chung (Sidebar, Navbar)
-│   │   ├── pages/               # Các trang chức năng chính
-│   │   │   ├── Overview.jsx     # Tổng quan dashboard, KPI & Hàng đợi phê duyệt (HITL)
-│   │   │   ├── ProductInsights.jsx # Chi tiết SKU, lịch sử so sánh giá, biểu đồ và nhãn cô lập
-│   │   │   ├── AgentWorkspace.jsx  # Xem chi tiết log suy luận LangGraph & đàm phán email RAG
-│   │   │   └── Configuration.jsx  # Cấu hình ngưỡng cảnh báo & Chỉ thị tùy chỉnh cho LLM
-│   │   ├── App.jsx              # Định tuyến trang & CSS Tokens chủ đạo
-│   │   └── index.css            # Thiết kế giao diện (Dark Mode, Glassmorphism, Neon borders)
-│
-├── scripts/
-│   └── generate_mock_data.py    # Script khởi tạo 200 SKU & 8,400 bản ghi lịch sử giá đối thủ
-│
-└── README.md                    # Hướng dẫn tổng quan nền tảng dự án
-```
+## 2. Architecture workflow
 
----
+```mermaid
+flowchart TD
+    User[Category Manager]
+    FE[React Frontend]
+    API[FastAPI Backend]
+    DB[(SQLite guardian.db)]
 
-## 🛠️ 2. Tình Trạng Mã Nguồn Hiện Tại (Current Implementation Status)
+    subgraph DemoData
+        SKU[data/sku_master.csv]
+        COMP[data/competitor_mock.csv]
+        SAMPLE[dataset_shopee-scraper_*.json]
+    end
 
-Dự án đã được phát triển vượt xa mức boilerplate thông thường. Các cấu phần kỹ thuật nâng cao sau đã được triển khai hoàn tất:
+    subgraph Services
+        Seed[demo_seed.py]
+        Scraper[scraper_engine.py]
+        CPI[cpi_calculator.py]
+        Agent[agent_engine.py]
+        Evidence[scraped_samples.py]
+    end
 
-### A. Quy Trình Cào Dữ Liệu Đa Kênh (Scraper Pipeline)
-*   **Marketplace (Shopee / Lazada):** Tích hợp SDK `apify-client` để gọi trực tiếp các actor cào dữ liệu từ nền tảng **Apify**, đảm bảo trích xuất đúng trường giá thực tế (Net Price) sau voucher/discount.
-*   **Website độc lập (Pharmacity / GrabMart):** Sử dụng thư viện `Crawl4AI` để crawl tài liệu thô dưới dạng markdown, sau đó trích xuất giá tự động.
-*   **Trình duyệt ngầm (Hasaki / TikTok Shop):** Tích hợp động cơ **Playwright** trực tiếp tại máy chủ, giả lập trình duyệt Chromium không đầu (headless) cùng các tham số tránh bị bot-detection để vượt qua các trang web kết xuất phía Client-side (CSR).
+    User --> FE
+    FE --> API
+    API --> DB
 
-### B. Chốt Chặn Xác Thực Giá Bất Thường (Anti-Honeypot Safeguards)
-*   **Thuật toán xác thực chéo (Cross-Validation):** Khi phát hiện dữ liệu giá cào mới từ đối thủ, hàm `check_price_anomaly` sẽ đối chiếu giá mới này với **trung bình lịch sử 10 lần cào sạch trước đó** của chính đối thủ đó trên SKU tương ứng.
-*   **Cô lập dữ liệu lỗi:** Nếu biên độ lệch giá vượt quá **50%** (ví dụ: bẫy giá Honeypot hiển thị giá rẻ bất thường), hệ thống tự động gán nhãn `is_suspicious = True`, **cô lập bản ghi** khỏi phép tính trung bình CPI để tránh làm sai lệch khuyến nghị định giá.
-*   **Hiển thị trực quan (Frontend UI):** Trên trang chi tiết sản phẩm, các mức giá lỗi sẽ bị làm mờ, gạch ngang và gắn nhãn **BẤT THƯỜNG (ISOLATED)** kèm chú thích lọc nhiễu rõ ràng.
+    SKU --> Seed
+    COMP --> Seed
+    Seed --> DB
 
-### C. Đồ Thị Trạng Thái AI Agent (LangGraph & LlamaIndex RAG)
-*   **LangGraph Cyclic Workflow:** Vận hành luồng xử lý alert theo đồ thị trạng thái tuần hoàn:
-    1.  `margin_analysis`: Phân tích biên lợi nhuận kỳ vọng của Guardian nếu khớp giá bán rẻ nhất của đối thủ.
-    2.  `determine_strategy`: Gọi LLM GPT-4o-mini (hoặc Fallback) để ra quyết định: Khớp giá (`match`) nếu biên lợi nhuận còn lại an toàn; hoặc chuyển sang đàm phán (`negotiate`) nếu biên lợi nhuận bị rớt quá sâu.
-    3.  `apply_auto_match` / `supplier_negotiation`: Đưa đề xuất khớp giá vào hàng đợi chờ duyệt, hoặc gọi **LlamaIndex RAG** đọc tài liệu chính sách hãng trong [supplier_policies.txt](file:///C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/data/knowledge/supplier_policies.txt) soạn thảo tự động email đàm phán giảm chi phí vốn nhập khẩu gửi hãng.
+    API --> Scraper
+    Scraper --> DB
+    DB --> CPI
+    CPI --> DB
+    DB --> Agent
+    Agent --> DB
 
-### D. Cơ Chế Phê Duyệt Con Người (Human-in-the-Loop - HITL)
-*   Các quyết định hạ giá bán lẻ của Guardian không được tự ý ghi đè vào CSDL bán hàng. AI Agent sẽ tạo đề xuất ở trạng thái `Pending` trong hàng đợi phê duyệt.
-*   Category Manager xem xét lý do lập luận của AI, sau đó bấm nút **Duyệt (Approve)** (khi đó CSDL mới cập nhật giá bán mới) hoặc **Từ chối (Reject)** (hủy đề xuất và đóng cảnh báo lệch giá).
-
-### E. Cấu Hình Động & Khả Năng Tự Phục Hồi (Resiliency)
-*   **Cấu hình động:** Toàn bộ tham số biên an toàn và các **Chỉ thị Tùy chỉnh (Custom Instructions)** dành cho LLM Agent được lưu trữ tại `config.json` và cập nhật thông qua REST API trên trang cấu hình Frontend.
-*   **Chống treo hệ thống:** Khai báo timeout 8 giây cho kết nối LLM kết hợp bộ lọc xử lý cú pháp JSON tự phục hồi (`Self-Healing JSON Parser`) bằng Regex, cam kết hệ thống luôn phản hồi mượt mà ngay cả khi API OpenAI bị nghẽn mạng.
-
----
-
-## 🚀 3. Hướng Dẫn Vận Hành Hệ Thống Cục Bộ
-
-### Bước 1: Kích hoạt môi trường ảo Python 3.12
-Mở terminal PowerShell tại thư mục gốc dự án và chạy:
-```powershell
-.venv312\Scripts\Activate
+    SAMPLE --> Evidence
+    Evidence --> API
+    API --> FE
 ```
 
-### Bước 2: Tái khởi tạo CSDL & Dữ liệu mẫu (8,400 bản ghi lịch sử)
-Để chuẩn bị dữ liệu sạch cho demo thuyết trình:
-```powershell
-Remove-Item -Force backend/guardian.db
-python scripts/generate_mock_data.py --db
+## 3. Seed workflow
+
+Workflow nay dung khi muon reset demo nhanh truoc luc thuyet trinh.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Configuration page
+    participant API as products.py
+    participant Seed as demo_seed.py
+    participant DB as SQLite
+    participant CPI as cpi_calculator.py
+
+    FE->>API: POST /api/v1/products/seed-demo
+    API->>Seed: seed_demo_dataset(db)
+    Seed->>DB: Delete Product / CompetitorPrice / Alert / Agent data
+    Seed->>DB: Insert products from sku_master.csv
+    Seed->>DB: Insert competitor prices from competitor_mock.csv
+    Seed->>CPI: calculate_all_cpi(db)
+    CPI->>DB: Create PricingIndex + Alerts
+    API-->>FE: status + counts
 ```
 
-### Bước 3: Khởi động FastAPI Backend
-Di chuyển vào thư mục `backend` và khởi chạy server:
-```powershell
-cd backend
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+## 4. Scrape workflow
+
+Workflow nay dung khi user bam "Scan channels".
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Overview
+    participant API as scraper.py
+    participant SE as scraper_engine.py
+    participant DB as SQLite
+    participant CPI as cpi_calculator.py
+
+    FE->>API: POST /api/v1/scraper/trigger
+    API->>SE: run_scraper_for_all_products()
+    loop Moi product
+        SE->>SE: scrape_via_apify / crawl4ai / playwright
+        alt No live source or scrape fail
+            SE->>SE: simulate_competitor_price()
+        end
+        SE->>SE: check_price_anomaly()
+        SE->>DB: Save CompetitorPrice
+        SE->>CPI: calculate_cpi_for_product()
+        CPI->>DB: Update PricingIndex
+        CPI->>DB: Generate alerts
+    end
 ```
-*API sẽ chạy tại: http://localhost:8000. Bạn có thể xem tài liệu API chi tiết tại: http://localhost:8000/docs*
 
-### Bước 4: Khởi động Frontend React (Vite)
-Mở một cửa sổ Terminal mới, di chuyển vào thư mục `frontend` và khởi chạy server:
-```powershell
-cd frontend
-npm install   # nếu chạy lần đầu
-npm run dev
+## 5. CPI and alert workflow
+
+Day la logic de bien du lieu gia thanh decision signal.
+
+```mermaid
+flowchart LR
+    CP[Latest competitor prices]
+    Filter[Bo qua OOS / null / suspicious]
+    Avg[Average competitor net price]
+    CPIVal[Competitor Pricing Index]
+    Rec[Recommendation]
+    Alert[Generate alerts]
+
+    CP --> Filter
+    Filter --> Avg
+    Avg --> CPIVal
+    CPIVal --> Rec
+    CPIVal --> Alert
 ```
-*Giao diện người dùng sẽ chạy tại: http://localhost:3000*
 
----
+Chi tiet:
 
-## 🏆 4. Các Điểm Cộng "Đáng Giá" Cho Bài Thuyết Trình
-1.  **Assortment Advantage:** Xử lý chuẩn Retail Intelligence: Khi đối thủ hết hàng (Out of Stock), hệ thống giữ nguyên giá của Guardian và đưa CPI về `N/A`, không giảm giá bừa bãi để giữ biên lợi nhuận tối đa cho Guardian.
-2.  **Anti-Honeypot validation:** AI lọc dữ liệu rác trước khi đưa vào tính CPI và phân tích giá.
-3.  **Human-in-the-Loop:** Cơ chế phòng ngừa rủi ro định giá sai gây thất thoát doanh thu của doanh nghiệp.
-4.  **LangGraph & Langfuse:** Kiến trúc Agentic tiên tiến nhất hiện nay cho phép theo dõi từng bước lập luận trực quan của mô hình.
+- `CPI = guardian_price / average_competitor_price * 100`
+- Neu CPI cao hon threshold -> `Lower Price`
+- Neu CPI thap hon threshold -> `Increase Price`
+- Neu competitor undercut manh -> tao `High` hoac `Medium` alert
+
+## 6. Agent workflow
+
+Day la workflow quan trong nhat cho theme agentic AI.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as AgentWorkspace
+    participant API as agent.py
+    participant DB as SQLite
+    participant Agent as agent_engine.py
+    participant Config as config.json
+    participant RAG as supplier_policies.txt / RAG
+
+    FE->>API: POST /api/v1/agent/run
+    API->>DB: Create AgentTask
+    API->>Agent: run_agentic_optimization_loop()
+    Agent->>DB: Load unresolved alerts
+
+    loop Moi alert
+        Agent->>Agent: margin_analysis
+        Agent->>Config: Read min_margin + custom instruction
+        Agent->>Agent: determine_strategy
+        alt strategy = match
+            Agent->>DB: Create AUTO_PRICE_MATCH (Pending)
+        else strategy = negotiate
+            Agent->>RAG: Query supplier policy context
+            Agent->>DB: Create SUPPLIER_EMAIL_DRAFT (Executed)
+        end
+        Agent->>DB: Append logs to AgentTask
+    end
+
+    FE->>API: GET /api/v1/agent/tasks
+    FE->>API: GET /api/v1/agent/actions
+    API-->>FE: Logs + actions
+```
+
+## 7. Agent briefing workflow
+
+Frontend mission control khong ghep du lieu thu cong nua. No dung `GET /agent/briefing`.
+
+```mermaid
+flowchart LR
+    Alerts[Unresolved alerts]
+    Prices[Latest valid competitor prices]
+    Margin[Margin analysis]
+    Queue[Priority queue]
+    Summary[Briefing summary]
+    FE[Overview page]
+
+    Alerts --> Margin
+    Prices --> Margin
+    Margin --> Queue
+    Margin --> Summary
+    Queue --> FE
+    Summary --> FE
+```
+
+`build_alert_decision_context()` la ham trung tam o workflow nay.
+
+No tra ra:
+
+- product nao bi undercut
+- competitor nao lien quan
+- gap gia bao nhieu
+- margin neu match
+- recommendation `match` hay `negotiate`
+- rationale de frontend hien thi
+
+## 8. Human approval workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as Category Manager
+    participant FE as AgentWorkspace
+    participant API as agent.py
+    participant DB as SQLite
+
+    CM->>FE: Approve AUTO_PRICE_MATCH
+    FE->>API: POST /api/v1/agent/actions/{id}/approve
+    API->>DB: Mark action Approved
+    API->>DB: Update guardian_price on Product
+    API->>DB: Resolve unresolved alerts for same product
+    API-->>FE: success
+
+    alt Reject action
+        CM->>FE: Reject
+        FE->>API: POST /api/v1/agent/actions/{id}/reject
+        API->>DB: Mark action Rejected
+        API->>DB: Resolve unresolved alerts
+        API-->>FE: success
+    end
+```
+
+## 9. Branch `branch_of_Duy` workflow
+
+Du lieu tu branch nay hien duoc dung nhu scrape evidence, khong phai full ingestion pipeline.
+
+```mermaid
+flowchart LR
+    JSON[dataset_shopee-scraper_*.json]
+    Service[scraped_samples.py]
+    Match[Lightweight catalog matching]
+    API[scraper/branch-samples]
+    UI[Overview]
+
+    JSON --> Service
+    Service --> Match
+    Match --> API
+    API --> UI
+```
+
+Muc dich:
+
+- show bang chung scrape sample that
+- map sample listing voi catalog hien tai neu co the
+- tang do thuyet phuc cho pitch
+
+## 10. Workflow de demo tren san khau
+
+Thu tu nen dung:
+
+1. Seed demo dataset
+2. Mo Overview
+3. Giai thich KPI, priority queue, branch sample evidence
+4. Mo ProductInsights de show raw pricing detail
+5. Chay agent trong AgentWorkspace
+6. Approve 1 action
+7. Quay lai Overview de cho thay state da thay doi
+
+## 11. Ghi chu ky thuat
+
+- Agent hien tai co the chay rule-based fallback neu khong co OpenAI key
+- Scraper hien tai co the fallback sang simulated pricing
+- Dashboard da duoc toi uu cho demo mission-control
+- Frontend build trong moi truong nay van bi vuong issue Vite/esbuild voi protected parent directories

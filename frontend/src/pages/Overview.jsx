@@ -1,42 +1,55 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { API_BASE_URL } from '../App.jsx'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { RefreshCw, Play, ShieldAlert, Award, TrendingUp, AlertTriangle, Cpu, Activity, ShieldCheck, ChevronRight } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  BrainCircuit,
+  Cpu,
+  RefreshCw,
+  Radar,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Target,
+  TrendingUp,
+} from 'lucide-react'
 
 function Overview() {
   const [stats, setStats] = useState(null)
   const [alerts, setAlerts] = useState([])
-  const [latestTask, setLatestTask] = useState(null)
+  const [briefing, setBriefing] = useState(null)
+  const [branchSamples, setBranchSamples] = useState([])
   const [recentActions, setRecentActions] = useState([])
   const [loading, setLoading] = useState(true)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
+  const [triggeringAgent, setTriggeringAgent] = useState(false)
 
   const fetchData = async () => {
     try {
       setLoading(true)
-      // Fetch core stats
-      const statsRes = await axios.get(`${API_BASE_URL}/pricing/overview`)
+      const [
+        statsRes,
+        alertsRes,
+        briefingRes,
+        actionsRes,
+        branchSamplesRes,
+      ] = await Promise.all([
+        axios.get(`${API_BASE_URL}/pricing/overview`),
+        axios.get(`${API_BASE_URL}/alerts`),
+        axios.get(`${API_BASE_URL}/agent/briefing?limit=5`),
+        axios.get(`${API_BASE_URL}/agent/actions?limit=5`),
+        axios.get(`${API_BASE_URL}/scraper/branch-samples`),
+      ])
+
       setStats(statsRes.data)
-
-      // Fetch alerts
-      const alertsRes = await axios.get(`${API_BASE_URL}/alerts`)
       setAlerts(alertsRes.data)
-
-      // Fetch latest agent task and actions
-      try {
-        const tasksRes = await axios.get(`${API_BASE_URL}/agent/tasks?limit=1`)
-        if (tasksRes.data.length > 0) {
-          setLatestTask(tasksRes.data[0])
-        }
-        
-        const actionsRes = await axios.get(`${API_BASE_URL}/agent/actions?limit=5`)
-        setRecentActions(actionsRes.data)
-      } catch (err) {
-        console.error('Error fetching agent details', err)
-      }
+      setBriefing(briefingRes.data)
+      setRecentActions(actionsRes.data)
+      setBranchSamples(branchSamplesRes.data)
     } catch (err) {
-      console.error('Error fetching overview statistics', err)
+      console.error('Error fetching overview data', err)
     } finally {
       setLoading(false)
     }
@@ -50,255 +63,316 @@ function Overview() {
     try {
       setTriggeringScrape(true)
       await axios.post(`${API_BASE_URL}/scraper/trigger`, {})
-      alert('Đã kích hoạt quét giá toàn sàn trong background. Dữ liệu sẽ cập nhật trong vài giây!')
+      fetchData()
     } catch (err) {
-      alert('Không thể kích hoạt quét giá.')
+      alert('Unable to trigger competitor scan.')
     } finally {
       setTriggeringScrape(false)
+    }
+  }
+
+  const handleRunAgent = async () => {
+    try {
+      setTriggeringAgent(true)
+      await axios.post(`${API_BASE_URL}/agent/run`, {
+        refresh_market_data: false
+      })
+      setTimeout(fetchData, 1200)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Unable to start agent run.')
+    } finally {
+      setTriggeringAgent(false)
     }
   }
 
   const handleResolveAlert = async (alertId) => {
     try {
       await axios.post(`${API_BASE_URL}/alerts/${alertId}/resolve`)
-      // Refresh local data
       fetchData()
     } catch (err) {
       console.error('Failed to resolve alert', err)
     }
   }
 
-  // Extract the last 3 lines of logs from the latest agent run
-  const getLatestThoughts = () => {
-    if (!latestTask || !latestTask.logs) return ['Chưa có hoạt động suy luận nào được ghi nhận.']
-    const lines = latestTask.logs.split('\n').filter(line => line.trim().length > 0)
-    return lines.slice(-3)
+  if (loading && !stats && !briefing) {
+    return <div style={{ color: 'var(--text-muted)' }}>Loading mission control...</div>
   }
 
-  // Count agent actions for business impact metrics
-  const getAgentImpactMetrics = () => {
-    const autoMatches = recentActions.filter(a => a.action_type === 'AUTO_PRICE_MATCH').length
-    const costNegotiations = recentActions.filter(a => a.action_type === 'SUPPLIER_EMAIL_DRAFT').length
-    
-    // Add base numbers to make the UI look rich out of the box
-    return {
-      autoPriceMatches: 102 + autoMatches,
-      costProtections: 14 + costNegotiations,
-      hoursSaved: 12.5 + (autoMatches * 0.1) + (costNegotiations * 0.5)
-    }
-  }
-
-  if (loading && !stats) {
-    return <div style={{ color: 'var(--text-muted)' }}>Đang tải dữ liệu tổng quan...</div>
-  }
-
-  // Prep data for competitor comparison chart
-  const competitorChartData = stats?.competitor_avg_prices 
+  const competitorChartData = stats?.competitor_avg_prices
     ? Object.entries(stats.competitor_avg_prices).map(([name, price]) => ({ name, price }))
     : []
 
-  const latestThoughts = getLatestThoughts()
-  const impact = getAgentImpactMetrics()
+  const summary = briefing?.summary
+  const queue = briefing?.priority_queue || []
+  const latestTaskLog = briefing?.latest_task?.logs
+    ? briefing.latest_task.logs.split('\n').filter(Boolean).slice(-4)
+    : ['No autonomous run yet. Seed demo data, then let the agent refresh market data and act.']
 
   return (
     <div>
-      {/* Header */}
       <div className="header">
         <div className="header-title">
-          <h1>Hệ thống Giám sát Giá & Biên lợi nhuận</h1>
-          <p>Dữ liệu tổng hợp thời gian thực đối với Top 200 SKU trọng điểm của Guardian.</p>
+          <h1>Agentic Pricing Mission Control</h1>
+          <p>Single source of truth for Top SKU pricing, promotion gaps, and approval-ready AI actions.</p>
         </div>
-        <button 
-          className="btn btn-primary"
-          onClick={handleTriggerScrape}
-          disabled={triggeringScrape}
-        >
-          <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-          {triggeringScrape ? 'Đang chạy quét...' : 'Quét giá đối thủ ngay'}
-        </button>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={handleTriggerScrape} disabled={triggeringScrape}>
+            <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
+            {triggeringScrape ? 'Scanning...' : 'Scan channels'}
+          </button>
+          <button className="btn btn-accent" onClick={handleRunAgent} disabled={triggeringAgent}>
+            <Cpu size={16} className={triggeringAgent ? 'pulse' : ''} />
+            {triggeringAgent ? 'Agent running...' : 'Run autonomous agent'}
+          </button>
+        </div>
       </div>
 
-      {/* KPI Cards */}
-      {stats && (
-        <div className="kpi-grid">
-          <div className="kpi-card cpi glass">
-            <div className="kpi-header">
-              <span>Chỉ số Giá Trung bình (CPI)</span>
-              <Award className="kpi-icon" size={16} />
-            </div>
-            <div className="kpi-value">{stats.average_cpi}%</div>
-            <div className="kpi-desc">
-              {stats.average_cpi > 100 
-                ? `Guardian cao hơn đối thủ ${roundDouble(stats.average_cpi - 100)}%`
-                : `Guardian rẻ hơn đối thủ ${roundDouble(100 - stats.average_cpi)}%`}
-            </div>
+      <div className="mission-band glass">
+        <div className="mission-copy">
+          <span className="mission-eyebrow">Perceive  Reason  Act</span>
+          <h2>The hackathon story should be visible in one glance.</h2>
+          <p>
+            The agent refreshes competitor channels, reasons over CPI and margin protection, then proposes
+            the safest next move for a Category Manager to approve.
+          </p>
+        </div>
+        <div className="mission-stats">
+          <div className="mission-stat">
+            <span>Tracked SKUs</span>
+            <strong>{summary?.monitored_sku ?? stats?.total_sku ?? 0}</strong>
           </div>
-
-          <div className="kpi-card underprice glass">
-            <div className="kpi-header">
-              <span>Cơ hội Tăng Giá (Lợi nhuận)</span>
-              <TrendingUp className="kpi-icon" size={16} />
-            </div>
-            <div className="kpi-value" style={{ color: 'var(--success)' }}>
-              {stats.underpriced_sku} SKU
-            </div>
-            <div className="kpi-desc">Rẻ hơn đối thủ đáng kể (&gt;10%)</div>
+          <div className="mission-stat">
+            <span>Active alerts</span>
+            <strong>{summary?.active_alerts ?? alerts.length}</strong>
           </div>
-
-          <div className="kpi-card overprice glass">
-            <div className="kpi-header">
-              <span>Sản phẩm Bị Ép Giá (Cạnh tranh)</span>
-              <AlertTriangle className="kpi-icon" size={16} />
-            </div>
-            <div className="kpi-value" style={{ color: 'var(--warning)' }}>
-              {stats.overpriced_sku} SKU
-            </div>
-            <div className="kpi-desc">Đắt hơn đối thủ đáng kể (&gt;10%)</div>
+          <div className="mission-stat">
+            <span>Pending approvals</span>
+            <strong>{summary?.pending_actions ?? 0}</strong>
           </div>
-
-          <div className="kpi-card alerts glass">
-            <div className="kpi-header">
-              <span>Cảnh báo Nghiêm trọng</span>
-              <ShieldAlert className="kpi-icon" size={16} />
-            </div>
-            <div className="kpi-value" style={{ color: 'var(--danger)' }}>
-              {stats.high_severity_alerts}
-            </div>
-            <div className="kpi-desc">Yêu cầu can thiệp khẩn cấp</div>
+          <div className="mission-stat">
+            <span>Last scrape</span>
+            <strong>{summary?.last_scrape_at ? formatDateTime(summary.last_scrape_at) : 'N/A'}</strong>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* AGENTIC AI LIVE REASONING & VALUE HIGHLIGHT (The Hackathon Winner Section) */}
-      <div className="dashboard-grid" style={{ gridTemplateColumns: '2fr 1fr', marginBottom: '24px' }}>
-        {/* Agent Thought stream */}
-        <div className="section-card glass" style={{ border: '1px solid rgba(99, 102, 241, 0.25)', boxShadow: 'var(--glow-secondary)' }}>
-          <div className="section-header" style={{ marginBottom: '12px' }}>
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#818cf8' }}>
-              <Cpu size={18} className={latestTask?.status === 'Running' ? 'pulse' : ''} />
-              Luồng Tư Duy Của AI Agent (Live Agent Explainable reasoning)
+      <div className="kpi-grid">
+        <MetricCard
+          title="Average CPI"
+          value={`${summary?.average_cpi ?? stats?.average_cpi ?? 100}%`}
+          detail="Guardian price index vs competitor average"
+          icon={<Target className="kpi-icon" size={16} />}
+        />
+        <MetricCard
+          title="High-risk alerts"
+          value={summary?.high_severity_alerts ?? stats?.high_severity_alerts ?? 0}
+          detail="Urgent undercutting or margin pressure"
+          icon={<ShieldAlert className="kpi-icon" size={16} />}
+        />
+        <MetricCard
+          title="Raise-price opportunities"
+          value={stats?.underpriced_sku ?? 0}
+          detail="Guardian priced meaningfully below market"
+          icon={<TrendingUp className="kpi-icon" size={16} />}
+        />
+        <MetricCard
+          title="Channels covered"
+          value={summary?.channels_covered ?? 0}
+          detail="Sources feeding the pricing command center"
+          icon={<Radar className="kpi-icon" size={16} />}
+        />
+      </div>
+
+      <div className="dashboard-grid" style={{ gridTemplateColumns: '1.3fr 1fr' }}>
+        <div className="section-card glass">
+          <div className="section-header">
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BrainCircuit size={18} style={{ color: '#8b5cf6' }} />
+              Live reasoning trace
             </div>
-            <span className="badge badge-info" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#818cf8', display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <Activity size={12} className={latestTask?.status === 'Running' ? 'pulse' : ''} />
-              {latestTask?.status === 'Running' ? 'AGENT ACTIVE' : 'AGENT IDLE'}
+            <span className="badge badge-info">
+              <Activity size={12} style={{ marginRight: '6px' }} />
+              {briefing?.latest_task?.status || 'Idle'}
             </span>
           </div>
-
-          <div style={{ background: '#05070c', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', fontFamily: 'var(--font-mono)', fontSize: '13px', color: '#10b981' }}>
-            {latestThoughts.map((thought, idx) => (
-              <div 
-                key={idx} 
-                style={{ 
-                  marginBottom: idx === latestThoughts.length - 1 ? 0 : '6px',
-                  color: thought.includes('ERROR') ? '#ef4444' : thought.includes('Tool Call') ? '#eab308' : thought.includes('Decision') ? '#6366f1' : '#cbd5e1',
-                  borderLeft: thought.includes('Decision') ? '2px solid #6366f1' : thought.includes('Tool Call') ? '2px solid #eab308' : 'none',
-                  paddingLeft: thought.includes('Decision') || thought.includes('Tool Call') ? '8px' : 0
-                }}
-              >
-                {thought}
+          <div className="reasoning-board">
+            {latestTaskLog.map((line, index) => (
+              <div key={index} className="reasoning-line">
+                {line}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Agentic business impact */}
-        <div className="section-card glass" style={{ border: '1px solid rgba(16, 185, 129, 0.25)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div className="section-header" style={{ marginBottom: '12px' }}>
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399' }}>
-              <ShieldCheck size={18} />
-              Hiệu Quả Thực Tế Từ AI Agent
+        <div className="section-card glass">
+          <div className="section-header">
+            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={18} style={{ color: 'var(--primary)' }} />
+              Priority queue
             </div>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flexGrow: 1 }}>
-            <div style={{ background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.1)', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--success)' }}>{impact.autoPriceMatches}</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Khớp Giá Tự Động</div>
-            </div>
-            <div style={{ background: 'rgba(99, 102, 241, 0.03)', border: '1px solid rgba(99, 102, 241, 0.1)', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
-              <div style={{ fontSize: '20px', fontWeight: '700', color: '#818cf8' }}>{impact.costProtections} lần</div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Bảo Vệ Biên Lợi Nhuận</div>
-            </div>
-          </div>
-          
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.02)', padding: '8px 12px', borderRadius: '8px' }}>
-            <span>Thời gian CM được giải phóng:</span>
-            <strong style={{ color: 'white' }}>{impact.hoursSaved.toFixed(1)} giờ</strong>
+          <div className="priority-list">
+            {queue.length > 0 ? (
+              queue.map((item) => (
+                <div key={item.alert_id} className="priority-card">
+                  <div className="priority-topline">
+                    <span className={`badge ${item.strategy === 'match' ? 'badge-warning' : 'badge-info'}`}>
+                      {item.strategy === 'match' ? 'Match' : 'Negotiate'}
+                    </span>
+                    <span className={`badge ${item.severity === 'High' ? 'badge-danger' : 'badge-warning'}`}>
+                      {item.severity}
+                    </span>
+                  </div>
+                  <strong>{item.product_name}</strong>
+                  <p>{item.rationale}</p>
+                  <div className="priority-metrics">
+                    <span>Gap {item.price_gap_pct}%</span>
+                    <span>Margin if matched {item.margin_if_matched_pct}%</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>No active decision queue yet.</div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Main Graphs & Alerts Panel */}
-      <div className="dashboard-grid">
-        {/* Competitor Price Chart */}
+      <div className="dashboard-grid" style={{ gridTemplateColumns: '1.2fr 0.8fr' }}>
         <div className="section-card glass">
           <div className="section-header">
-            <div className="section-title">So sánh Mức giá Trung bình giữa các Sàn (VND)</div>
+            <div className="section-title">Channel pricing map</div>
           </div>
           <div style={{ width: '100%', height: 320 }}>
             {competitorChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={competitorChartData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
+                <BarChart data={competitorChartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} />
-                  <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${val/1000}k`} />
-                  <Tooltip 
+                  <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
+                  <Tooltip
                     contentStyle={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'white' }}
-                    formatter={(value) => [`${value.toLocaleString()} VND`, 'Giá trung bình']}
+                    formatter={(value) => [`${Number(value).toLocaleString()} VND`, 'Average net price']}
                   />
                   <Bar dataKey="price" radius={[8, 8, 0, 0]}>
                     {competitorChartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={entry.name === 'GrabMart' ? '#00b14f' : entry.name === 'Shopee' ? '#f04b29' : entry.name === 'Lazada' ? '#3b82f6' : '#6366f1'} 
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          entry.name === 'GrabMart'
+                            ? '#00b14f'
+                            : entry.name === 'Shopee'
+                              ? '#f04b29'
+                              : entry.name === 'Lazada'
+                                ? '#3b82f6'
+                                : entry.name === 'TikTok Shop'
+                                  ? '#111827'
+                                  : '#8b5cf6'
+                        }
                       />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: '100px' }}>
-                Chưa có dữ liệu so sánh giá. Vui lòng chạy quét giá!
+              <div style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: '120px' }}>
+                No channel data yet.
               </div>
             )}
           </div>
         </div>
 
-        {/* Live System Alerts */}
         <div className="section-card glass">
           <div className="section-header">
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldAlert size={18} style={{ color: 'var(--danger)' }} />
-              Cảnh báo Gần đây
-            </div>
-            <span className="badge badge-danger">{alerts.length} Active</span>
+            <div className="section-title">Branch data evidence</div>
           </div>
+          <div className="sample-list">
+            {branchSamples.length > 0 ? (
+              branchSamples.map((sample, index) => (
+                <div key={`${sample.kind}-${index}`} className="sample-card">
+                  <div className="sample-labels">
+                    <span className="badge badge-info">{sample.platform}</span>
+                    <span className="badge badge-warning">{sample.kind.replace('_', ' ')}</span>
+                  </div>
+                  <strong>{sample.title}</strong>
+                  <p>
+                    {sample.current_price ? `${Number(sample.current_price).toLocaleString()} VND` : 'Price unavailable'}
+                    {sample.discount_pct ? `  •  ${sample.discount_pct}% off` : ''}
+                  </p>
+                  <div className="sample-meta">
+                    <span>{sample.record_count} record(s)</span>
+                    <span>{sample.rating ? `${sample.rating} rating` : 'No rating'}</span>
+                  </div>
+                  {sample.match && (
+                    <div className="sample-match">
+                      Matched to catalog: {sample.match.product_name}
+                    </div>
+                  )}
+                  {sample.url && (
+                    <a href={sample.url} target="_blank" rel="noreferrer" className="action-card-details-btn">
+                      Open source listing
+                    </a>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>No imported branch samples found.</div>
+            )}
+          </div>
+        </div>
+      </div>
 
+      <div className="dashboard-grid">
+        <div className="section-card glass">
+          <div className="section-header">
+            <div className="section-title">Alert feed</div>
+            <span className="badge badge-danger">{alerts.length} active</span>
+          </div>
           <div className="alerts-list">
             {alerts.length > 0 ? (
-              alerts.map((alert) => (
+              alerts.slice(0, 8).map((alert) => (
                 <div className="alert-item" key={alert.id}>
                   <div className={`alert-badge ${alert.severity}`} />
                   <div className="alert-content">
                     <div className="alert-item-header">
-                      <span className="alert-product-name">{alert.product?.name || 'Sản phẩm'}</span>
+                      <span className="alert-product-name">{alert.product?.name || 'Product'}</span>
                       <span className="alert-time">{formatTime(alert.created_at)}</span>
                     </div>
                     <p className="alert-msg">{alert.message}</p>
                   </div>
-                  <button 
-                    className="alert-resolve-btn"
-                    title="Bỏ quan cảnh báo này"
-                    onClick={() => handleResolveAlert(alert.id)}
-                  >
-                    ✕
+                  <button className="alert-resolve-btn" onClick={() => handleResolveAlert(alert.id)}>
+                    ×
                   </button>
                 </div>
               ))
             ) : (
               <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
-                Không có cảnh báo nào chưa xử lý. Tuyệt vời!
+                No unresolved alerts.
               </div>
+            )}
+          </div>
+        </div>
+
+        <div className="section-card glass">
+          <div className="section-header">
+            <div className="section-title">Recent agent actions</div>
+          </div>
+          <div className="priority-list">
+            {recentActions.length > 0 ? (
+              recentActions.map((action) => (
+                <div key={action.id} className="priority-card">
+                  <div className="priority-topline">
+                    <span className={`badge ${action.action_type === 'AUTO_PRICE_MATCH' ? 'badge-warning' : 'badge-info'}`}>
+                      {action.action_type === 'AUTO_PRICE_MATCH' ? 'Price match' : 'Supplier draft'}
+                    </span>
+                    <span className="badge badge-success">{action.status}</span>
+                  </div>
+                  <strong>{action.description}</strong>
+                  <p>Created at {formatDateTime(action.created_at)}</p>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: 'var(--text-muted)' }}>No agent actions yet.</div>
             )}
           </div>
         </div>
@@ -307,14 +381,31 @@ function Overview() {
   )
 }
 
-// Helpers
-function roundDouble(val) {
-  return Math.round(val * 100) / 100
+function MetricCard({ title, value, detail, icon }) {
+  return (
+    <div className="kpi-card glass">
+      <div className="kpi-header">
+        <span>{title}</span>
+        {icon}
+      </div>
+      <div className="kpi-value">{value}</div>
+      <div className="kpi-desc">{detail}</div>
+    </div>
+  )
 }
 
 function formatTime(isoStr) {
   const d = new Date(isoStr)
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+function formatDateTime(isoStr) {
+  return new Date(isoStr).toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export default Overview

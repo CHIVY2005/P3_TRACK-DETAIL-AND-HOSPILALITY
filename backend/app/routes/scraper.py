@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from app.db.session import get_db
 from app.db import models
 from app.scraper.scraper_engine import run_scraper_for_all_products, scrape_realtime_competitor_prices
+from app import schemas
+from app.services.scraped_samples import load_branch_scrape_samples
 
 router = APIRouter()
 
@@ -63,3 +65,8 @@ def trigger_scrape(
 def get_scraper_status():
     global scraper_status
     return scraper_status
+
+
+@router.get("/branch-samples", response_model=list[schemas.ScrapeSample])
+def get_branch_samples(db: Session = Depends(get_db)):
+    return load_branch_scrape_samples(db)

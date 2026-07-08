@@ -79,15 +79,15 @@ function Configuration() {
   }
 
   const handleResetDatabase = async () => {
-    const confirmReset = window.confirm('Bạn có chắc chắn muốn cài đặt lại toàn bộ Cơ sở dữ liệu và tải lại Mock Data gốc (200 SKU)? Toàn bộ dữ liệu hiện tại sẽ bị xóa sạch.')
+    const confirmReset = window.confirm('Reload the hackathon demo dataset? This replaces current products, competitor prices, alerts, and agent actions.')
     if (!confirmReset) return
 
     try {
       setSeeding(true)
-      await axios.post(`${API_BASE_URL}/scraper/trigger`, {})
-      alert('Đã gửi yêu cầu Reset & Recalibrate. Cơ sở dữ liệu đang đồng bộ lại!')
+      const res = await axios.post(`${API_BASE_URL}/products/seed-demo`)
+      alert(res.data.message)
     } catch (err) {
-      alert('Không thể thực hiện Reset.')
+      alert(err.response?.data?.detail || 'Unable to seed demo dataset.')
     } finally {
       setSeeding(false)
     }

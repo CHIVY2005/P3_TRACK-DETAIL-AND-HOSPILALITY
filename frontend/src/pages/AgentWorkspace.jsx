@@ -70,10 +70,14 @@ function AgentWorkspace() {
     }
   }, [activeTask?.logs])
 
+  const [refreshMarketData, setRefreshMarketData] = useState(false)
+
   const handleRunAgent = async () => {
     try {
       setRunning(true)
-      const res = await axios.post(`${API_BASE_URL}/agent/run`)
+      const res = await axios.post(`${API_BASE_URL}/agent/run`, {
+        refresh_market_data: refreshMarketData
+      })
       setActiveTask(res.data)
     } catch (err) {
       if (err.response && err.response.status === 409) {
@@ -128,17 +132,29 @@ function AgentWorkspace() {
       <div className="header">
         <div className="header-title">
           <h1>AI Agent Workspace</h1>
-          <p>Kích hoạt và giám sát các tác vụ định giá, tính toán biên lợi nhuận, và soạn thảo thư thương lượng tự động.</p>
+          <p>Agent tự refresh dữ liệu thị trường, phân tích biên lợi nhuận, rồi đề xuất hành động giá để con người duyệt.</p>
         </div>
-        <button 
-          className="btn btn-accent"
-          onClick={handleRunAgent}
-          disabled={running}
-          style={{ padding: '12px 24px' }}
-        >
-          <Cpu size={18} className={running ? 'pulse' : ''} />
-          {running ? 'Agent đang chạy...' : 'Kích hoạt Pricing Agent'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+            <input 
+              type="checkbox" 
+              checked={refreshMarketData} 
+              onChange={(e) => setRefreshMarketData(e.target.checked)} 
+              disabled={running}
+              style={{ cursor: 'pointer' }}
+            />
+            Cào lại dữ liệu thị trường thực tế (chậm)
+          </label>
+          <button 
+            className="btn btn-accent"
+            onClick={handleRunAgent}
+            disabled={running}
+            style={{ padding: '12px 24px' }}
+          >
+            <Cpu size={18} className={running ? 'pulse' : ''} />
+            {running ? 'Agent đang chạy...' : 'Chạy autonomous agent'}
+          </button>
+        </div>
       </div>
 
       {/* Terminal Grid */}
@@ -156,7 +172,7 @@ function AgentWorkspace() {
           </div>
           <div className="terminal-body">
             <div className="terminal-prompt" style={{ marginBottom: '8px' }}>
-              systemctl start guardian-pricing-agent.service
+              guardian-agent run --refresh-market-data
             </div>
             {activeTask ? (
               <>
@@ -177,7 +193,7 @@ function AgentWorkspace() {
               </>
             ) : (
               <div style={{ color: 'var(--text-muted)', paddingTop: '20px' }}>
-                Hệ thống Agent đang ở chế độ chờ. Hãy bấm "Kích hoạt Pricing Agent" ở trên để khởi chạy chu trình tối ưu.
+                Hệ thống Agent đang ở chế độ chờ. Hãy bấm "Chạy autonomous agent" để agent tự cào, tự phân tích, và tạo action queue.
               </div>
             )}
             <div ref={terminalEndRef} />

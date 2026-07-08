@@ -859,3 +859,127 @@ body {
   border-radius: 12px;
   border: 1px solid var(--border-color);
 }
+
+.mission-band {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 24px;
+  padding: 28px;
+  margin-bottom: 24px;
+}
+
+.mission-copy h2 {
+  font-size: 30px;
+  line-height: 1.05;
+  margin: 8px 0 10px;
+  max-width: 12ch;
+}
+
+.mission-copy p {
+  color: var(--text-muted);
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+.mission-eyebrow {
+  display: inline-flex;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--primary);
+}
+
+.mission-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mission-stat,
+.priority-card,
+.sample-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.mission-stat span,
+.sample-meta,
+.priority-metrics {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.mission-stat strong {
+  display: block;
+  font-size: 22px;
+  margin-top: 8px;
+}
+
+.reasoning-board {
+  background: #05070c;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 220px;
+}
+
+.reasoning-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #d1d5db;
+  line-height: 1.55;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.reasoning-line:last-child {
+  border-bottom: none;
+}
+
+.priority-list,
+.sample-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.priority-topline,
+.sample-labels,
+.sample-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.priority-card p,
+.sample-card p {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 8px 0;
+}
+
+.priority-metrics {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.sample-match {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(240, 137, 19, 0.08);
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+@media (max-width: 1024px) {
+  .mission-band {
+    grid-template-columns: 1fr;
+  }
+}

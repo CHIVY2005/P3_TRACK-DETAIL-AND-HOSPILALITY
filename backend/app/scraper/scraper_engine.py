@@ -119,8 +119,13 @@ async def scrape_via_playwright(barcode: str, competitor_name: str) -> dict:
     """
     if competitor_name not in ["Hasaki", "TikTok Shop"]:
         return None
-        
-    from playwright.async_api import async_playwright
+
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as e:
+        print(f"Playwright is unavailable for {competitor_name}: {e}")
+        return None
+
     import re
     
     url = ""

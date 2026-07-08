@@ -1,174 +1,405 @@
-# GUARDIAN - Real-Time Pricing & Human-in-the-Loop AI Agent Platform
+# GUARDIAN Pricing Command Center
 
-Đây là bộ mã nguồn Boilerplate (Khung dự án chuẩn) phục vụ cho cuộc thi AI Hackathon. Hệ thống tích hợp khả năng giám sát giá đa kênh thời gian thực (Shopee, Lazada, TikTok Shop, GrabMart) đối với Top 200 SKU và vận hành **LangGraph AI Agent** kết hợp cơ chế kiểm soát phê duyệt của con người (**Human-in-the-Loop - HITL**) nhằm tối ưu hóa biên lợi nhuận một cách an toàn và tin cậy.
+GUARDIAN la mot MVP cho bai toan hackathon "Real-time price checking and comparison". He thong tap trung vao 3 viec:
 
----
+- Gom du lieu gia da kenh thanh mot `single source of truth`
+- Tinh CPI va phat hien chenh lech gia quan trong
+- Cho AI agent de xuat hanh dong theo vong `Perceive -> Reason -> Act`, nhung van co `human-in-the-loop`
 
-## 🚀 Kiến Trúc Hệ Thống & Luồng Công Việc (Workflows)
+## Demo story
 
-### 1. Sơ Đồ Kiến Trúc MVP (MVP System Architecture)
-Sơ đồ dưới đây mô tả cấu trúc hoạt động của sản phẩm ở mức tối thiểu khả thi (MVP), thể hiện sự phân tách giữa Frontend (React), Backend (FastAPI), Database (PostgreSQL/SQLite), Caching/Broker (Redis) và các worker xử lý nền.
+San pham hien tai phu hop de demo theo flow nay:
 
-```mermaid
-graph TD
-    User([Category Manager]) -->|Phê duyệt / Từ chối hành động| FE[Frontend: React + Vite]
-    
-    subgraph REST API & WebSockets
-        FE -->|API Requests & Approvals| BE[Backend: FastAPI]
-        BE -->|Real-time Logs / Action Status| FE
-    end
+1. Seed bo du lieu 200 SKU va lich su gia doi thu
+2. Mo dashboard `Agentic Pricing Mission Control`
+3. Xem alert queue, CPI, channel map, va branch scrape evidence
+4. Chay autonomous agent de agent tu refresh gia thi truong roi moi reasoning
+5. Duyet hoac tu choi cac de xuat `AUTO_PRICE_MATCH`
 
-    subgraph Data & Caching Layer
-        BE -->|Read/Write| DB[(Database: PostgreSQL / SQLite)]
-        BE -->|Queue Tasks / Cache| Cache[(Cache & Broker: Redis)]
-    end
+## Kha nang chinh
 
-    subgraph Background Workers & Core Engines
-        Cache -->|Triggers Scrape| Scraper[Scraper Engine]
-        Cache -->|Triggers Agent| Agent[LangGraph AI Agent]
-    end
+- Backend `FastAPI + SQLAlchemy + SQLite`
+- Frontend `React + Vite + Recharts`
+- Du lieu demo gom `200` SKU va `8400` competitor price records
+- Agent tu dong phan tich margin truoc khi de xuat match gia
+- Agent da co tool layer ro rang cho margin, price-match proposal, supplier policy lookup, va email draft
+- Da san sang trace qua Langfuse neu cung cap credentials that
+- RAG mock cho supplier negotiation draft
+- Import duoc sample scrape tu `branch_of_Duy`
 
-    Scraper -->|Scraped Data| DB
-    Agent -->|Propose Actions & Logs| DB
+## Kien truc tong quan
+
+```text
+Frontend (React)
+  -> goi REST API
+Backend (FastAPI)
+  -> doc/ghi SQLite
+  -> tinh CPI, tao alert
+  -> chay agent loop
+  -> expose scrape evidence
+Data
+  -> data/sku_master.csv
+  -> data/competitor_mock.csv
+  -> dataset_shopee-scraper_*.json
 ```
 
----
+## Workflow
 
-### 2. Luồng Phối Hợp Giữa Các Frameworks AI & Human-in-the-Loop (HITL Workflow)
-Sơ đồ này mô tả cách thức các thư viện và nền tảng AI nâng cao (**LangGraph, Crawl4AI, Apify, LlamaIndex, OpenAI và Langfuse**) phối hợp với nhau và tích hợp cơ chế phê duyệt thủ công (**Human-in-the-Loop**) để xử lý chênh lệch giá một cách an toàn:
+### 1. System workflow
+
+```mermaid
+flowchart LR
+    CM[Category Manager]
+    FE[Frontend Mission Control]
+    API[FastAPI Backend]
+    DB[(SQLite guardian.db)]
+    CSV[data/*.csv]
+    SCRAPE[Scraper Engine]
+    CPI[CPI + Alert Engine]
+    AGENT[Pricing Agent]
+    SAMPLE[branch_of_Duy sample JSON]
+
+    CM --> FE
+    FE --> API
+    API --> DB
+
+    CSV --> API
+    API --> SCRAPE
+    SCRAPE --> DB
+    DB --> CPI
+    CPI --> DB
+    DB --> AGENT
+    AGENT --> DB
+    SAMPLE --> API
+    API --> FE
+    DB --> FE
+```
+
+### 2. Seed demo workflow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant CM as Category Manager (Human)
-    participant SE as Scraper Engine (Apify & Crawl4AI)
-    participant DB as PostgreSQL / SQLite
-    participant LG as LangGraph StateMachine
-    participant LI as LlamaIndex (RAG)
-    participant LLM as OpenAI (GPT-4o-mini)
-    participant LF as Langfuse Observability
+    participant User as User / CM
+    participant FE as Frontend
+    participant API as POST /products/seed-demo
+    participant Seed as demo_seed.py
+    participant DB as SQLite
+    participant CPI as cpi_calculator.py
 
-    CM->>SE: Kích hoạt quét giá đối thủ
-    Note over SE: Apify chạy Actor (Shopee/Lazada)<br/>Crawl4AI crawl Web (Pharmacity)
-    SE->>DB: Lưu trữ Net Price đối thủ & Cập nhật chỉ số CPI
-    Note over DB: Phát hiện CPI lệch vượt ngưỡng (>10%)<br/>Tự động kích hoạt Cảnh báo (Alert)
-    
-    CM->>LG: Kích hoạt AI Pricing Agent
-    LG->>DB: Truy vấn danh sách cảnh báo & thông tin Giá vốn (Cost Price)
-    
-    Note over LG: Khởi tạo LangGraph State: margin_analysis
-    LG->>LLM: Gửi Prompt suy luận chiến lược (Match giá hay Thương lượng)
-    LLM-->>LF: Tracing vết LLM, đo độ trễ & token
-    LLM-->>LG: Trả về kết quả JSON (strategy: "match" hoặc "negotiate")
-    
-    alt Strategy is MATCH (Biên lợi nhuận >= 15%)
-        LG->>DB: Đề xuất khớp giá tự động với trạng thái CHỜ DUYỆT (Action Status: Pending)
-    else Strategy is NEGOTIATE (Biên lợi nhuận < 15%)
-        LG->>LI: Truy vấn chính sách hỗ trợ hãng (query_supplier_policy_rag)
-        LI->>LI: Tra cứu ngữ nghĩa trong supplier_policies.txt
-        LI-->>LG: Trả về điều khoản hoàn tiền & email liên hệ đại diện hãng
-        LG->>DB: Tạo thư đàm phán gửi Supplier với trạng thái ĐÃ XỬ LÝ (Action Status: Executed)
-    end
-    
-    LG->>DB: Lưu toàn bộ logs suy nghĩ (Thoughts)
-    DB-->>CM: Hiển thị Đề xuất Khớp giá (Chờ duyệt) trên Dashboard
-    
-    Note over CM: CM xem xét chênh lệch & biên lợi nhuận
-    CM->>DB: Bấm Phê duyệt (Approve) hành động
-    DB->>DB: Cập nhật giá bán mới của Guardian & Đóng cảnh báo (Alert Resolved)
+    User->>FE: Bam "Seed demo dataset"
+    FE->>API: POST /api/v1/products/seed-demo
+    API->>Seed: seed_demo_dataset()
+    Seed->>DB: Xoa Product / Price / Alert / Agent data cu
+    Seed->>DB: Nap data/sku_master.csv
+    Seed->>DB: Nap data/competitor_mock.csv
+    Seed->>CPI: calculate_all_cpi()
+    CPI->>DB: Tao PricingIndex + Alert moi
+    API-->>FE: So SKU, so price records, status
+    FE-->>User: Dashboard san sang de demo
 ```
 
----
+### 3. Scrape and pricing intelligence workflow
 
-## 🧠 Vai Trò Của AI Agent & Human-in-the-Loop (HITL)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as Frontend
+    participant API as POST /scraper/trigger
+    participant SE as scraper_engine.py
+    participant DB as SQLite
+    participant CPI as cpi_calculator.py
+    participant UI as Overview / ProductInsights
 
-Trong nền tảng **GUARDIAN**, AI Pricing Agent không hoạt động một cách mù quáng mà phối hợp chặt chẽ với Category Manager qua cơ chế **Human-in-the-Loop (HITL)**:
+    FE->>API: Trigger scan
+    API->>SE: Chay scrape background
+    loop Moi product
+        SE->>SE: Thu Apify / Crawl4AI / Playwright
+        alt Khong scrape duoc
+            SE->>SE: Fallback simulate_competitor_price()
+        end
+        SE->>DB: Save CompetitorPrice
+        SE->>CPI: calculate_cpi_for_product()
+        CPI->>DB: Update PricingIndex + Alerts
+    end
+    UI->>API: GET /pricing/overview, /pricing/cpi-index, /alerts
+    API->>DB: Read latest data
+    API-->>UI: KPI, CPI, alerts, price history
+```
 
-1.  **Market Observer Agent (Giám sát & Phát hiện Bất thường):**
-    *   *Nhiệm vụ:* Theo dõi liên tục biến động giá Net Price của đối thủ trên các kênh Shopee, Lazada, TikTok Shop, GrabMart bằng **Apify** và **Crawl4AI**.
-2.  **Margin Guardian Agent (Đề xuất tối ưu bằng LangGraph):**
-    *   *Nhiệm vụ:* Khi phát hiện phá giá, Agent sử dụng đồ thị trạng thái **LangGraph** để lập luận. Nếu biên lợi nhuận ròng dự kiến đạt trên ngưỡng an toàn (>15%), Agent sẽ tạo một hành động **AUTO_PRICE_MATCH** ở trạng thái **Pending (Chờ duyệt)** thay vì tự động đổi giá ngay lập tức, đảm bảo quyền kiểm soát tối cao thuộc về con người.
-3.  **Supplier Negotiator Agent (Đàm phán viên ảo bằng LlamaIndex RAG):**
-    *   *Nhiệm vụ:* Nếu biên lợi nhuận rớt xuống dưới ngưỡng an toàn (<15%), Agent chuyển hướng đàm phán, tự động dùng **LlamaIndex** tra cứu các điều khoản giảm giá nhập trong hợp đồng (`supplier_policies.txt`) và soạn thư nháp hoàn chỉnh gửi Supplier.
-4.  **Category Manager (Quyền phê duyệt tối cao):**
-    *   *Nhiệm vụ:* Category Manager chỉ cần mở **AI Agent Workspace**, xem xét các hành động khớp giá do AI đề xuất và bấm **Duyệt Khớp Giá (Approve)** hoặc **Từ Chối (Reject)** để kiểm soát rủi ro kinh doanh.
+### 4. Agent workflow
 
----
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as Category Manager
+    participant FE as Agent Workspace
+    participant API as POST /agent/run
+    participant Agent as agent_engine.py
+    participant DB as SQLite
+    participant Config as config.json
 
-## 📁 Cấu Trúc Thư Mục
+    CM->>FE: Run pricing agent
+    FE->>API: POST /api/v1/agent/run
+    API->>DB: Tao AgentTask Pending
+    API->>Agent: Run background loop
+    Agent->>DB: Lay unresolved alerts
+    loop Moi alert
+        Agent->>Agent: margin_analysis
+        Agent->>Config: Doc thresholds + instructions
+        Agent->>Agent: determine_strategy
+        alt Margin van an toan
+            Agent->>DB: Tao AgentAction AUTO_PRICE_MATCH (Pending)
+        else Margin khong an toan
+            Agent->>DB: Tao AgentAction SUPPLIER_EMAIL_DRAFT (Executed)
+        end
+        Agent->>DB: Ghi logs vao AgentTask
+    end
+    FE->>API: Poll /agent/tasks va /agent/actions
+    API-->>FE: Logs + actions + statuses
+```
+
+### 5. Human approval workflow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CM as Category Manager
+    participant FE as Frontend
+    participant API as /agent/actions/{id}/approve
+    participant DB as SQLite
+
+    CM->>FE: Approve AUTO_PRICE_MATCH
+    FE->>API: POST approve
+    API->>DB: Update AgentAction -> Approved
+    API->>DB: Update Product.guardian_price
+    API->>DB: Resolve related alerts
+    API-->>FE: Success
+    FE-->>CM: Dashboard refresh voi gia moi
+```
+
+## Cau truc thu muc
 
 ```text
-├── backend/                  # FastAPI Application
-│   ├── app/
-│   │   ├── db/               # SQLAlchemy Session & Models (sqlite/postgres)
-│   │   ├── routes/           # API Endpoints (Products, Alerts, Scraper, Agent)
-│   │   ├── services/         # CPI Calculator, LangGraph Agent Loop Engine
-│   │   ├── scraper/          # Scraper Engine (Crawl4AI & Apify API client)
-│   │   ├── schemas.py        # Pydantic schemas
-│   │   ├── config.py         # Cấu hình môi trường (SQLite/PostgreSQL)
-│   │   └── main.py           # Entrypoint khởi tạo FastAPI
-│   └── requirements.txt      # Thư viện Python yêu cầu
-├── frontend/                 # React + Vite Client
-│   ├── src/
-│   │   ├── pages/            # Overview, ProductInsights, AgentWorkspace, Configuration
-│   │   ├── App.jsx           # Main routing & state
-│   │   ├── index.css         # Custom Premium CSS Variables & Styles
-│   │   └── main.jsx          # Entrypoint React
-│   ├── package.json          # npm packages
-│   └── vite.config.js        # Vite config
-├── scripts/                  # Công cụ & Kịch bản bổ trợ
-│   ├── generate_mock_data.py # Tạo 200 SKU & Seed CSDL
-│   ├── test_backend.py       # Kiểm thử API Endpoints tự động
-│   └── test_matching_agent.py# Kiểm thử độ tương đồng khử nhiễu LlamaIndex
-├── mock_data/                # Tệp tin mẫu phục vụ demo
-│   └── guardian_master_sku.csv # Tệp sản phẩm chuẩn để nạp động
-├── docs/                     # Tài liệu & Pitch Deck dàn ý
-├── docker-compose.yml        # PostgreSQL & Redis container setup (Tùy chọn)
-└── .env                      # Cấu hình biến môi trường
+backend/
+  app/
+    config.py
+    schemas.py
+    main.py
+    db/
+    routes/
+    scraper/
+    services/
+  data/
+frontend/
+  src/
+    App.jsx
+    index.css
+    pages/
+scripts/
+data/
+docs/
 ```
 
----
+## Cac man hinh frontend
 
-## 🛠️ Hướng Dẫn Cài Đặt & Chạy Dự Án
+### `Overview`
 
-### 1. Cài đặt Backend & Khởi tạo Dữ liệu
-Mở Terminal tại thư mục gốc của dự án:
+Trang tong quan da duoc doi thanh mission control:
 
-```bash
-# 1. Tạo môi trường ảo Python 3.12 (khuyên dùng để có sẵn gói wheels cho Windows)
+- KPI ve CPI, alert, pending approvals, channel coverage
+- Live reasoning trace tu agent task gan nhat
+- Priority queue cho cac case can xu ly truoc
+- Branch scrape evidence tu `branch_of_Duy`
+- Alert feed va recent actions
+
+### `ProductInsights`
+
+- Danh sach SKU
+- Chi tiet 1 san pham
+- Bang so sanh guardian vs competitor
+- Bieu do lich su net price
+
+### `AgentWorkspace`
+
+- Chay agent loop
+- Xem logs
+- Xem va approve/reject cac agent actions
+- Xem supplier negotiation draft
+
+### `Configuration`
+
+- Dieu chinh threshold
+- Upload CSV SKU
+- Seed lai demo dataset
+
+## Backend APIs quan trong
+
+### Products
+
+- `GET /api/v1/products`
+- `GET /api/v1/products/{product_id}`
+- `POST /api/v1/products`
+- `PUT /api/v1/products/{product_id}`
+- `POST /api/v1/products/import-csv`
+- `POST /api/v1/products/seed-demo`
+
+### Pricing
+
+- `GET /api/v1/pricing/overview`
+- `GET /api/v1/pricing/cpi-index`
+
+### Alerts
+
+- `GET /api/v1/alerts`
+- `POST /api/v1/alerts/{alert_id}/resolve`
+
+### Scraper
+
+- `POST /api/v1/scraper/trigger`
+- `GET /api/v1/scraper/status`
+- `GET /api/v1/scraper/branch-samples`
+
+### Agent
+
+- `POST /api/v1/agent/run`
+- `GET /api/v1/agent/briefing`
+- `GET /api/v1/agent/tasks`
+- `GET /api/v1/agent/actions`
+- `POST /api/v1/agent/actions/{action_id}/approve`
+- `POST /api/v1/agent/actions/{action_id}/reject`
+- `GET /api/v1/agent/config`
+- `POST /api/v1/agent/config`
+
+## Agent tools
+
+Agent hien tai goi cac tool noi bo sau:
+
+- `compute_margin_scenarios`
+- `adjust_system_price`
+- `query_supplier_policy`
+- `generate_supplier_negotiation_draft`
+
+Tool calls nay duoc ghi vao `AgentTask.logs`. Neu co Langfuse key that, chung cung duoc trace thanh observation/tool span.
+
+## Agent run mode
+
+`POST /api/v1/agent/run` hien tai da duoc doi thanh kieu orchestrator run:
+
+1. Tu refresh competitor data
+2. Tu cap nhat CPI va alerts
+3. Tu phan tich alert queue
+4. Tao agent actions de con nguoi duyet
+
+Neu can, co the gui payload:
+
+```json
+{
+  "refresh_market_data": true
+}
+```
+
+## Langfuse
+
+He thong se tu dong bat Langfuse khi cac env sau hop le:
+
+```text
+LANGFUSE_PUBLIC_KEY
+LANGFUSE_SECRET_KEY
+LANGFUSE_HOST
+```
+
+Neu khong co key that:
+
+- agent van chay binh thuong
+- LLM van fallback sang rule-based decision
+- Langfuse tracing se tu dong tat
+
+## Chay du an
+
+### 1. Backend
+
+Tu thu muc goc:
+
+```powershell
 py -3.12 -m venv .venv312
-
-# 2. Kích hoạt môi trường ảo
 .venv312\Scripts\activate
-
-# 3. Cài đặt các thư viện (Đã bao gồm LangGraph, Crawl4AI, Apify, LlamaIndex, Langfuse)
-pip install -r backend/requirements.txt
-
-# 4. Tạo dữ liệu giả lập & Seed vào Database SQLite (guardian.db)
-python scripts/generate_mock_data.py --db
-
-# 5. Khởi chạy Backend Server
+pip install -r backend\requirements.txt
 cd backend
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-API Docs sẽ có sẵn tại: `http://localhost:8000/docs`
 
-### 2. Cài đặt & Chạy Frontend Dashboard
-Mở cửa sổ Terminal mới:
+API docs:
 
-```bash
+```text
+http://localhost:8000/docs
+```
+
+### 2. Frontend
+
+Mo terminal moi:
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
-Truy cập giao diện tại: `http://localhost:3000`
 
-### 3. Kiểm thử thuật toán khử nhiễu của Agent
-Kiểm tra xem hệ thống khớp giá và loại bỏ sản phẩm sai định lượng dung tích hoạt động như thế nào bằng lệnh:
-```bash
-python scripts/test_matching_agent.py
+Frontend:
+
+```text
+http://localhost:3000
 ```
----
-*Chúc các bạn đạt giải cao nhất trong cuộc thi AI Hackathon sắp tới!*
 
-![GUARDIAN Dashboard Preview](docs/dashboard_preview.png)
+## Seed du lieu demo
+
+Co 2 cach:
+
+### Cach 1: qua API
+
+```text
+POST /api/v1/products/seed-demo
+```
+
+### Cach 2: qua script cu
+
+```powershell
+python scripts\generate_mock_data.py --db
+```
+
+## Branch `branch_of_Duy`
+
+Repo hien tai da ke thua 2 file scrape sample tu branch nay:
+
+- `dataset_shopee-scraper_2026-07-06_04-32-31-501.json`
+- `dataset_shopee-scraper_2026-07-06_05-01-14-978.json`
+
+He thong doc cac file nay qua service `scraped_samples.py` va hien thi tren dashboard de lam bang chung scrape cho demo.
+
+Luu y:
+
+- Mot file la sample mock cua actor Shopee
+- Mot file la sample scrape that 1 listing
+- Chung chua thay the duoc full pipeline scrape 200 SKU
+
+## Trang thai ky thuat hien tai
+
+Da xong:
+
+- Seed demo dataset on demand
+- Agent briefing API
+- Mission control overview
+- Branch scrape evidence
+- Human approval flow
+
+Chua xong hoan toan:
+
+- Build frontend trong moi truong nay dang bi chan boi `esbuild / Vite` khi no di tim config o parent directories bi protect
+- Chua co pipeline scrape that o quy mo 200 SKU
+- Chua co auth, queue worker, va production deployment
+
+## File nen doc tiep
+
+- [TECHNICAL_EXPLANATION.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/TECHNICAL_EXPLANATION.md)
+- [CODEBASE_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/CODEBASE_GUIDE.md)
+- [docs/pitch_deck_draft.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/pitch_deck_draft.md)
