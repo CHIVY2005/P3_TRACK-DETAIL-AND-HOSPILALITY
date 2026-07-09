@@ -1,0 +1,18 @@
+[SESSION COMPRESSION COMMAND]
+Hội thoại này sắp quá tải token. Hãy đóng vai trò là một "Kỹ sư đồng bộ trạng thái". Nhiệm vụ của bạn là nén toàn bộ lịch sử thảo luận, các quyết định kiến trúc và trạng thái code của dự án "Guardian Pricing Platform" trong cửa sổ này thành một "Viên nhộng bối cảnh" (Context Capsule) cực kỳ cô đọng để tôi mang sang một cửa sổ chat mới.
+
+Hãy xuất kết quả theo cấu trúc chính xác sau:
+
+### 1. KIẾN TRÚC & ĐỊNH HƯỚNG ĐÃ CHỐT:
+- (Tóm tắt ngắn gọn các công nghệ, luồng chạy, thiết kế DB hoặc cấu trúc đã thống nhất)
+
+### 2. TRẠNG THÁI CODE & BẢN VÁ (PATCHES):
+- (Liệt kê các file đang xử lý dở dang, các hàm quan trọng đã tối ưu hoặc logic sửa lỗi vừa áp dụng thành công)
+
+### 3. VẤN ĐỀ TỒN ĐỌNG & LỖI CHƯA FIX (LOG/BUGS):
+- (Các bug đang gặp phải, log lỗi thô chưa xử lý hoặc tính năng đang bị nghẽn chưa tìm ra giải pháp)
+
+### 4. NHIỆM VỤ TIẾP THEO (NEXT STEPS):
+- (Hành động cụ thể cần làm ngay lập tức khi mở cửa sổ mới)
+
+Yêu cầu: Viết ngắn gọn, súc tích, lược bỏ mọi lời giải thích lý thuyết dông dài để tiết kiệm tối đa token cho phiên chat tiếp theo.

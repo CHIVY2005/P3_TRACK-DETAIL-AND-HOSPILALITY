@@ -1,0 +1,1 @@
+Hãy trả lời thật ngắn gọn, đi thẳng vào giải pháp kiến trúc. KHÔNG viết lại toàn bộ đoạn mã nguồn nếu tôi không yêu cầu. Chỉ chỉ ra dòng cần sửa hoặc viết đoạn code thay thế (diff code). Không giải thích dài dòng mang tính lý thuyết.

@@ -1,15 +1,21 @@
 import os
 from typing import Any, Dict, List, Optional, Union
+
+from dotenv import load_dotenv
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
 
-# Load env variables from root workspace if they exist
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-ENV_PATH = os.path.join(ROOT_DIR, ".env")
-if os.path.exists(ENV_PATH):
-    load_dotenv(ENV_PATH)
-else:
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ROOT_ENV_PATH = os.path.join(ROOT_DIR, ".env")
+BACKEND_ENV_PATH = os.path.join(BACKEND_DIR, ".env")
+
+# Load root defaults first, then let backend/.env override for demo/runtime safety.
+if os.path.exists(ROOT_ENV_PATH):
+    load_dotenv(ROOT_ENV_PATH)
+if os.path.exists(BACKEND_ENV_PATH):
+    load_dotenv(BACKEND_ENV_PATH, override=True)
+if not os.path.exists(ROOT_ENV_PATH) and not os.path.exists(BACKEND_ENV_PATH):
     load_dotenv()
 
 class Settings(BaseSettings):
@@ -18,6 +24,8 @@ class Settings(BaseSettings):
     
     # Backwards compatibility / defaults
     ENV: str = "development"
+    HOST: str = "127.0.0.1"
+    PORT: int = 8001
     
     DATABASE_URL: str
     
@@ -35,6 +43,7 @@ class Settings(BaseSettings):
     HASAKI_SEARCH_ACTOR_ID: str = "hasaki-search-actor-id"
     APIFY_FIXTURE_FALLBACK: bool = True
     APIFY_FIXTURE_PATH: str = "dataset_shopee-scraper_2026-07-06_05-01-14-978.json"
+    FRONTEND_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
 
     # Pricing Alert Configuration
     ALERT_UNDERPRICE_THRESHOLD: float = 0.10  # 10%
@@ -47,6 +56,10 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+
+    @property
+    def frontend_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.FRONTEND_ORIGINS.split(",") if origin.strip()]
 
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 

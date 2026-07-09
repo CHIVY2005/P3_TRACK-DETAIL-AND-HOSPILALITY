@@ -1,0 +1,13 @@
+[CONTEXT RESTORATION]
+Tôi đang thực hiện kỹ thuật Session Reset để giải phóng bộ nhớ token. Dưới đây là "Viên nhộng bối cảnh" (Context Capsule) được mang qua từ phiên làm việc trước của dự án "Guardian Pricing Platform" (FastAPI + React + SQLite).
+
+Hãy đọc, ghi nhớ toàn bộ trạng thái dưới đây và chuẩn bị sẵn sàng phối hợp làm việc tiếp:
+
+==================================================
+[DÁN TOÀN BỘ NỘI DUNG MÀ AI ĐÃ XUẤT RA Ở BƯỚC 1 VÀO ĐÂY]
+==================================================
+
+Quy tắc phản hồi ngay bây giờ:
+1. KHÔNG chào hỏi, KHÔNG viết lại lý thuyết hay giải thích những gì bạn vừa đọc.
+2. Hãy phân tích nhanh "Nhiệm vụ tiếp theo" và đưa ra phản hồi ngắn gọn dưới 5 dòng: Tóm lược bạn hiểu chúng ta đang dừng lại ở đâu và giải pháp sơ bộ cho bước tiếp theo là gì.
+3. Chờ câu lệnh tiếp theo từ tôi để bắt tay vào xử lý.

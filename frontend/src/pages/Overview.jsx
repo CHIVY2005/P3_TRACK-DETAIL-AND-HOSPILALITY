@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { toast } from 'react-toastify'
 import { API_BASE_URL } from '../App.jsx'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { RefreshCw, Play, ShieldAlert, Award, TrendingUp, AlertTriangle, Cpu, Activity, ShieldCheck, ChevronRight } from 'lucide-react'
@@ -11,6 +12,21 @@ function Overview() {
   const [recentActions, setRecentActions] = useState([])
   const [loading, setLoading] = useState(true)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
+  const [syncLoading, setSyncLoading] = useState(false)
+
+  const handleBulkSync = async () => {
+    setSyncLoading(true);
+    try {
+        await axios.post(`${API_BASE_URL}/sync/all`);
+        toast.success("Chiến dịch quét giá toàn sàn đã được kích hoạt ngầm thành công!");
+        // TODO: Initialize short-polling sequence here to check logs from AgentTask table
+    } catch (error) {
+        console.error("Sync error:", error);
+        toast.error("Kích hoạt thất bại. Vui lòng kiểm tra cổng kết nối!");
+    } finally {
+        setSyncLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -108,14 +124,35 @@ function Overview() {
           <h1>Hệ thống Giám sát Giá & Biên lợi nhuận</h1>
           <p>Dữ liệu tổng hợp thời gian thực đối với Top 200 SKU trọng điểm của Guardian.</p>
         </div>
-        <button 
-          className="btn btn-primary"
-          onClick={handleTriggerScrape}
-          disabled={triggeringScrape}
-        >
-          <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-          {triggeringScrape ? 'Đang chạy quét...' : 'Quét giá đối thủ ngay'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="btn btn-primary"
+            onClick={handleTriggerScrape}
+            disabled={triggeringScrape}
+          >
+            <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
+            {triggeringScrape ? 'Đang chạy quét...' : 'Quét giá đối thủ ngay'}
+          </button>
+          
+          <button
+              onClick={handleBulkSync}
+              disabled={syncLoading}
+              className={`px-4 py-2 rounded font-medium text-white transition-all ${
+                  syncLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
+              }`}
+          >
+              {syncLoading ? (
+                  <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg> Đang kích hoạt...
+                  </span>
+              ) : (
+                  "🚀 Đồng bộ Toàn Sàn"
+              )}
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}

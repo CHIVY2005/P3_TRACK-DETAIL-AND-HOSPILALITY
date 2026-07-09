@@ -1,0 +1,26 @@
+{
+    "barcode": [
+        "barcode",
+        "ean",
+        "ean-13",
+        "upc",
+        "sku_code",
+        "item_code"
+    ],
+    "product_name": [
+        "product_name",
+        "name",
+        "title",
+        "description",
+        "item_name",
+        "ten_san_pham"
+    ],
+    "price": [
+        "price",
+        "cost",
+        "unit_price",
+        "gia",
+        "giá",
+        "retail_price"
+    ]
+}

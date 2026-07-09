@@ -2,7 +2,11 @@ import re
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+import random
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -181,4 +185,37 @@ def sync_price(
         "matched_product": match,
         "updated_price": scraped_price_int,
     }
+
+
+logger = logging.getLogger(__name__)
+
+async def execute_bulk_sync(db: Session):
+    try:
+        # We try to filter by is_active if it exists, otherwise just query all.
+        # Assuming is_active is on SkuMaster based on requirements.
+        active_skus = db.query(SkuMaster).filter(getattr(SkuMaster, "is_active", True) == True).all()
+        
+        apify_service = get_apify_service()
+
+        for sku in active_skus:
+            competitor_links = db.query(CompetitorLink).filter(CompetitorLink.barcode == sku.barcode).all()
+            
+            for link in competitor_links:
+                try:
+                    # Using existing get_apify_service() for tasks
+                    actor_id = getattr(settings, "HASAKI_SCRAPER_ACTOR_ID", "default_actor_id")
+                    # Since existing code is synchronous apify_service.run_scraper, we run it in thread or directly if it's fine.
+                    apify_service.run_scraper(actor_id=actor_id, target_url=link.url)
+                except Exception as e:
+                    logger.error(f"Error syncing SKU {sku.barcode} with URL {link.url}: {e}")
+                
+            await asyncio.sleep(random.uniform(2.0, 5.0))
+            
+    except Exception as e:
+        logger.error(f"Fatal error during bulk sync: {e}")
+
+@router.post("/v1/sync/all", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_bulk_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    background_tasks.add_task(execute_bulk_sync, db)
+    return {"status": "processing", "message": "Bulk synchronization started successfully"}
 

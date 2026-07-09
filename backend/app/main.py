@@ -1,13 +1,33 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config import settings
-from app.db.session import engine
+from app.db.session import engine, SessionLocal
 from app.db.models import Base
 from app.routes import products, pricing, alerts, scraper, agent, sync
+from app.routes.sync import execute_bulk_sync
+
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+except ImportError:  # pragma: no cover - startup fallback for demo environments
+    AsyncIOScheduler = None
 
 # Create database tables automatically for the hackathon environment.
 # This ensures that once the user runs the project, the tables are auto-created.
 Base.metadata.create_all(bind=engine)
+
+logger = logging.getLogger(__name__)
+scheduler = AsyncIOScheduler() if AsyncIOScheduler else None
+
+async def scheduled_bulk_sync():
+    db = SessionLocal()
+    try:
+        await execute_bulk_sync(db)
+    except Exception as e:
+        logger.error(f"Scheduled sync job failed: {e}")
+    finally:
+        db.close()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -17,14 +37,29 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+@app.on_event("startup")
+async def startup_event():
+    if scheduler is None:
+        logger.warning("APScheduler is not installed; scheduled bulk sync is disabled.")
+        return
+
+    scheduler.add_job(
+        scheduled_bulk_sync,
+        'interval',
+        hours=2,
+        id='automated_bulk_sync',
+        replace_existing=True
+    )
+    scheduler.start()
+
 # CORS configuration - allow all origins for easy hackathon integration,
 # but can be restricted using env variables.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=settings.frontend_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Register API Routers
@@ -42,4 +77,14 @@ def read_root():
         "project": settings.PROJECT_NAME,
         "docs": "/docs",
         "version": "1.0.0"
+    }
+
+
+@app.get(f"{settings.API_V1_STR}/health")
+def read_health():
+    return {
+        "status": "healthy",
+        "api_base": settings.API_V1_STR,
+        "database_url": settings.DATABASE_URL,
+        "fallback_fixture": settings.APIFY_FIXTURE_FALLBACK,
     }
