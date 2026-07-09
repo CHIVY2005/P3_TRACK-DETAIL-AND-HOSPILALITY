@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     HASAKI_SCRAPER_ACTOR_ID: str = "xtracto/shopee-scraper"
     HASAKI_SEARCH_ACTOR_ID: str = "hasaki-search-actor-id"
     APIFY_FIXTURE_FALLBACK: bool = True
-    APIFY_FIXTURE_PATH: str = "dataset_shopee-scraper_2026-07-06_05-01-14-978.json"
+    APIFY_FIXTURE_PATH: str = "backend/data/apify_fallback_fixture.json"
     FRONTEND_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
 
     # Pricing Alert Configuration

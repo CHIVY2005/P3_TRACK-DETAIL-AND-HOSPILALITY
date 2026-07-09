@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.session import engine, SessionLocal
 from app.db.models import Base
-from app.routes import products, pricing, alerts, scraper, agent, sync
+from app.routes import products, pricing, alerts, scraper, agent, sync, ingest
 from app.routes.sync import execute_bulk_sync
 
 try:
@@ -68,7 +68,9 @@ app.include_router(pricing.router, prefix=f"{settings.API_V1_STR}/pricing", tags
 app.include_router(alerts.router, prefix=f"{settings.API_V1_STR}/alerts", tags=["Alerts"])
 app.include_router(scraper.router, prefix=f"{settings.API_V1_STR}/scraper", tags=["Scraper Controls"])
 app.include_router(agent.router, prefix=f"{settings.API_V1_STR}/agent", tags=["AI Agent Workspace"])
+app.include_router(ingest.router, prefix=f"{settings.API_V1_STR}/ingest", tags=["Ingestion"])
 app.include_router(sync.router, prefix="/api", tags=["Sync"])
+
 
 @app.get("/")
 def read_root():

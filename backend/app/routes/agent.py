@@ -1,10 +1,15 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
-from app.db.session import get_db
-from app.db import models
+
 from app import schemas
+from app.config import settings
+from app.db import models
+from app.db.session import SessionLocal, get_db
 from app.services.agent_engine import run_agentic_optimization_loop
+from app.services.apify_client import get_apify_service
+from app.services.link_discovery import discover_competitor_link
+
 
 router = APIRouter()
 
@@ -30,8 +35,7 @@ def trigger_agent_run(background_tasks: BackgroundTasks, db: Session = Depends(g
             status_code=status.HTTP_409_CONFLICT,
             detail="AI Agent loop is already running in background."
         )
-    
-    # Create an initial Pending task to return to client immediately
+
     task = models.AgentTask(
         objective="Analyze active price discrepancies, protect profit margins, and optimize competitor index.",
         status="Pending",
@@ -41,18 +45,11 @@ def trigger_agent_run(background_tasks: BackgroundTasks, db: Session = Depends(g
     db.commit()
     db.refresh(task)
 
-    # Spawn background thread with its own db session
-    from app.db.session import SessionLocal
-    bg_db = SessionLocal()
-    
-    # We delete the dummy task we just created inside the thread or update it.
-    # To keep it clean, let's pass the task.id so the agent thread loads and updates this exact task!
     def run_agent_thread(task_id: int):
         global is_agent_running
         is_agent_running = True
         thread_db = SessionLocal()
         try:
-            from app.services.agent_engine import run_agentic_optimization_loop
             run_agentic_optimization_loop(thread_db, task_id)
         except Exception as e:
             print(f"Error in background agent task: {e}")
@@ -61,11 +58,44 @@ def trigger_agent_run(background_tasks: BackgroundTasks, db: Session = Depends(g
             thread_db.close()
 
     background_tasks.add_task(run_agent_thread, task.id)
-    
     return task
+
+
+
+@router.post("/link-discovery/{barcode}", status_code=status.HTTP_202_ACCEPTED)
+def trigger_link_discovery(barcode: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    sku = db.query(models.SkuMaster).filter(models.SkuMaster.barcode == barcode).first()
+    if not sku:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"SKU with barcode {barcode} not found in sku_master.",
+        )
+
+    def run_link_discovery_thread(target_barcode: str, product_name: str):
+        thread_db = SessionLocal()
+        try:
+            discovered_url = discover_competitor_link(target_barcode, product_name, thread_db, platform="Shopee")
+            apify_service = get_apify_service()
+            apify_service.run_scraper(
+                actor_id=settings.HASAKI_SEARCH_ACTOR_ID,
+                target_url=discovered_url,
+            )
+        except Exception as e:
+            print(f"Link discovery background task failed: {e}")
+        finally:
+            thread_db.close()
+
+    background_tasks.add_task(run_link_discovery_thread, sku.barcode, sku.product_name)
+    return {
+        "status": "accepted",
+        "barcode": sku.barcode,
+        "message": "Link discovery queued and fallback scraper triggered.",
+    }
+
 
 @router.get("/tasks", response_model=List[schemas.AgentTask])
 def list_agent_tasks(limit: int = 50, db: Session = Depends(get_db)):
+
     return db.query(models.AgentTask).order_by(models.AgentTask.started_at.desc()).limit(limit).all()
 
 @router.get("/tasks/{task_id}", response_model=schemas.AgentTask)
