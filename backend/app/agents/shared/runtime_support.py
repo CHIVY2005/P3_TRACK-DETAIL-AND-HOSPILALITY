@@ -46,21 +46,6 @@ def get_langfuse_client():
         return None
 
 
-@lru_cache(maxsize=1)
-def get_langfuse_callback():
-    client = get_langfuse_client()
-    if not client:
-        return None
-
-    try:
-        from langfuse.langchain import CallbackHandler
-
-        return CallbackHandler()
-    except Exception as exc:
-        print(f"Langfuse callback initialization failed: {exc}")
-        return None
-
-
 def flush_langfuse() -> None:
     client = get_langfuse_client()
     if not client:

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { Bot, CheckCircle2, ExternalLink, Mail, Send, Terminal, XCircle } from 'lucide-react'
-import { API_BASE_URL } from '../App.jsx'
+import { API_BASE_URL } from '../api.js'
 
 function AgentWorkspace() {
   const [tasks, setTasks] = useState([])

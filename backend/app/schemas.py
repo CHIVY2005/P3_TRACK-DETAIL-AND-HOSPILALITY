@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -18,12 +18,11 @@ class CompetitorPriceCreate(CompetitorPriceBase):
     product_id: int
 
 class CompetitorPrice(CompetitorPriceBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     product_id: int
     scraped_at: datetime
-
-    class Config:
-        from_attributes = True
 
 # --- Pricing Index Schemas ---
 class PricingIndexBase(BaseModel):
@@ -32,12 +31,11 @@ class PricingIndexBase(BaseModel):
     recommendation: str
 
 class PricingIndex(PricingIndexBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     product_id: int
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 # --- Alert Schemas ---
 class AlertBase(BaseModel):
@@ -48,20 +46,18 @@ class AlertBase(BaseModel):
 
 
 class AlertProductRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
 
-    class Config:
-        from_attributes = True
-
 class Alert(AlertBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     product_id: int
     created_at: datetime
     product: Optional[AlertProductRef] = None
-
-    class Config:
-        from_attributes = True
 
 # --- Product Schemas ---
 class ProductBase(BaseModel):
@@ -85,6 +81,8 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
 
 class Product(ProductBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime
     updated_at: datetime
@@ -92,9 +90,6 @@ class Product(ProductBase):
     # We can nest related items if needed, or query them separately.
     pricing_indices: List[PricingIndex] = []
     alerts: List[Alert] = []
-
-    class Config:
-        from_attributes = True
 
 # --- Combined Product Details ---
 class ProductDetail(Product):
@@ -110,6 +105,53 @@ class OverviewStats(BaseModel):
     category_distribution: dict
     competitor_avg_prices: dict
 
+
+class ChannelPricingIndex(BaseModel):
+    channel: str
+    cpi: float
+    price_gap_pct: float
+    position: str
+    avg_guardian_price: float
+    avg_net_price: float
+    sku_coverage: int
+    coverage_pct: float
+    observation_coverage_pct: float
+    freshness_pct: float
+    data_quality_pct: float
+    promotion_sku: int
+    promotion_coverage_pct: float
+    voucher_sku: int
+    bundle_sku: int
+    flash_sale_sku: int
+    guardian_premium_sku: int
+    guardian_value_sku: int
+    opportunity_count: int
+    latest_scrape_at: Optional[datetime] = None
+
+
+class ChannelIntelligenceSummary(BaseModel):
+    target_sku: int
+    monitored_sku: int
+    target_coverage_pct: float
+    observed_sku: int
+    fresh_sku: int
+    configured_channels: int
+    channels_with_data: int
+    overall_cpi: float
+    automated_observation_coverage_pct: float
+    valid_observation_pct: float
+    fresh_observation_pct: float
+    freshness_sla_hours: int
+    promotion_observations: int
+    pricing_opportunities: int
+    latest_observation_at: Optional[datetime] = None
+    latest_observation_age_hours: Optional[float] = None
+
+
+class ChannelIntelligence(BaseModel):
+    summary: ChannelIntelligenceSummary
+    channels: List[ChannelPricingIndex]
+
 # --- Agentic AI Schemas ---
 class AgentActionBase(BaseModel):
     action_type: str
@@ -118,13 +160,12 @@ class AgentActionBase(BaseModel):
     data: Optional[str] = None
 
 class AgentAction(AgentActionBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     task_id: int
     product_id: int
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class AgentTaskBase(BaseModel):
     objective: str
@@ -132,13 +173,12 @@ class AgentTaskBase(BaseModel):
     logs: Optional[str] = None
 
 class AgentTask(AgentTaskBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     started_at: datetime
     completed_at: Optional[datetime] = None
     actions: List[AgentAction] = []
-
-    class Config:
-        from_attributes = True
 
 class AgentConfig(BaseModel):
     underprice_threshold: float
@@ -162,6 +202,11 @@ class AgentBriefingChannel(BaseModel):
     avg_net_price: float
     sku_coverage: int
     alert_count: int
+    cpi: float = 100.0
+    coverage_pct: float = 0.0
+    freshness_pct: float = 0.0
+    promotion_sku: int = 0
+    opportunity_count: int = 0
 
 
 class AgentBriefingPriority(BaseModel):

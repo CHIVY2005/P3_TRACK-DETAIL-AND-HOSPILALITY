@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ExternalLink, Search } from 'lucide-react'
-import { API_BASE_URL } from '../App.jsx'
+import { API_BASE_URL } from '../api.js'
 
 function ProductInsights() {
   const [products, setProducts] = useState([])
@@ -51,6 +51,7 @@ function ProductInsights() {
   )
 
   const chartData = getChartData(productDetail)
+  const latestCompetitorRows = getLatestCompetitorRows(productDetail)
   const currentCPI = products.find((product) => product.id === Number(selectedProductId))?.competitor_index || 100
 
   return (
@@ -121,8 +122,8 @@ function ProductInsights() {
                 </div>
 
                 <div className="product-kv-grid">
-                  <Metric label="Guardian price" value={`${productDetail.guardian_price.toLocaleString()}đ`} tone="accent" />
-                  <Metric label="Cost price" value={`${(productDetail.cost_price || 0).toLocaleString()}đ`} />
+                  <Metric label="Guardian price" value={formatCurrency(productDetail.guardian_price)} tone="accent" />
+                  <Metric label="Cost price" value={formatCurrency(productDetail.cost_price || 0)} />
                   <Metric
                     label="Margin"
                     value={
@@ -161,16 +162,16 @@ function ProductInsights() {
                     <tbody>
                       <tr className="guardian-row">
                         <td><strong>Guardian</strong></td>
-                        <td>{productDetail.guardian_price.toLocaleString()}đ</td>
+                        <td>{formatCurrency(productDetail.guardian_price)}</td>
                         <td>-</td>
                         <td>-</td>
                         <td>-</td>
-                        <td><strong>{productDetail.guardian_price.toLocaleString()}đ</strong></td>
+                        <td><strong>{formatCurrency(productDetail.guardian_price)}</strong></td>
                         <td>-</td>
                         <td>-</td>
                       </tr>
 
-                      {productDetail.competitor_prices?.slice(0, 8).map((priceRow) => {
+                      {latestCompetitorRows.map((priceRow) => {
                         const isOos = priceRow.stock_status === 'OUT_OF_STOCK' || priceRow.net_price === null
                         const isSuspicious = priceRow.is_suspicious
                         const diff = isOos || isSuspicious ? null : priceRow.net_price - productDetail.guardian_price
@@ -179,8 +180,8 @@ function ProductInsights() {
                         return (
                           <tr key={priceRow.id}>
                             <td><strong>{priceRow.competitor_name}</strong></td>
-                            <td>{priceRow.raw_price ? `${priceRow.raw_price.toLocaleString()}đ` : '-'}</td>
-                            <td>{priceRow.discount ? `${priceRow.discount.toLocaleString()}đ` : '-'}</td>
+                            <td>{priceRow.raw_price ? formatCurrency(priceRow.raw_price) : '-'}</td>
+                            <td>{priceRow.discount ? formatCurrency(priceRow.discount) : '-'}</td>
                             <td>{priceRow.voucher_details || '-'}</td>
                             <td>{priceRow.promo_mechanics || '-'}</td>
                             <td>
@@ -189,7 +190,7 @@ function ProductInsights() {
                               ) : isSuspicious ? (
                                 <span className="badge badge-warning">Suspicious</span>
                               ) : (
-                                <strong>{priceRow.net_price.toLocaleString()}đ</strong>
+                                <strong>{formatCurrency(priceRow.net_price)}</strong>
                               )}
                             </td>
                             <td className={diff === null ? '' : diff < 0 ? 'price-bad' : 'price-good'}>
@@ -199,7 +200,7 @@ function ProductInsights() {
                                   ? 'Noise filtered'
                                   : diff === 0
                                     ? 'On parity'
-                                    : `${diff > 0 ? '+' : ''}${diff.toLocaleString()}đ (${Math.round(diffPct)}%)`}
+                                    : `${formatSignedCurrency(diff)} (${Math.round(diffPct)}%)`}
                             </td>
                             <td>
                               {priceRow.url ? (
@@ -236,7 +237,7 @@ function ProductInsights() {
                           color: 'var(--text-main)',
                           borderRadius: '12px',
                         }}
-                        formatter={(value) => [`${value.toLocaleString()} VND`]}
+                        formatter={(value) => [formatCurrency(value)]}
                       />
                       <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
                       <Line type="monotone" dataKey="Guardian" stroke="var(--accent-strong)" strokeWidth={3} activeDot={{ r: 7 }} />
@@ -274,18 +275,52 @@ function getChartData(productDetail) {
   if (!productDetail?.competitor_prices) return []
 
   const dateGroups = {}
-  productDetail.competitor_prices.forEach((row) => {
-    const dateStr = new Date(row.scraped_at).toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' })
-    if (!dateGroups[dateStr]) {
-      dateGroups[dateStr] = {
-        date: dateStr,
+  const sortedRows = [...productDetail.competitor_prices].sort(
+    (a, b) => new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime()
+  )
+
+  sortedRows.forEach((row) => {
+    const dateValue = new Date(row.scraped_at)
+    const dateKey = dateValue.toISOString().slice(0, 10)
+    if (!dateGroups[dateKey]) {
+      dateGroups[dateKey] = {
+        sortKey: dateKey,
+        date: dateValue.toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' }),
         Guardian: productDetail.guardian_price,
       }
     }
-    dateGroups[dateStr][row.competitor_name] = row.net_price
+    dateGroups[dateKey][row.competitor_name] = row.net_price
   })
 
-  return Object.values(dateGroups).sort((a, b) => a.date.localeCompare(b.date))
+  return Object.values(dateGroups)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .slice(-7)
+}
+
+function getLatestCompetitorRows(productDetail) {
+  if (!productDetail?.competitor_prices) return []
+
+  const latestByChannel = new Map()
+  const sortedRows = [...productDetail.competitor_prices].sort((a, b) => {
+    const timeDelta = new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+    return timeDelta || b.id - a.id
+  })
+
+  sortedRows.forEach((row) => {
+    if (!latestByChannel.has(row.competitor_name)) {
+      latestByChannel.set(row.competitor_name, row)
+    }
+  })
+  return [...latestByChannel.values()].sort((a, b) => a.competitor_name.localeCompare(b.competitor_name))
+}
+
+function formatCurrency(value) {
+  return `${Number(value).toLocaleString('en-US')} VND`
+}
+
+function formatSignedCurrency(value) {
+  const sign = value > 0 ? '+' : value < 0 ? '-' : ''
+  return `${sign}${Math.abs(Number(value)).toLocaleString('en-US')} VND`
 }
 
 export default ProductInsights

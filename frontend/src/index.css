@@ -51,10 +51,7 @@ body,
 
 body {
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 32%),
-    radial-gradient(circle at right 20%, rgba(217, 119, 6, 0.08), transparent 28%),
-    linear-gradient(180deg, #f5f1ea 0%, #eee8de 100%);
+  background: #f3f5f2;
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
 }
@@ -83,9 +80,8 @@ a {
 .glass {
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
-  border-radius: 18px;
+  border-radius: 8px;
   box-shadow: var(--shadow-card);
-  backdrop-filter: blur(14px);
 }
 
 .app-shell {
@@ -99,9 +95,7 @@ a {
   top: 0;
   height: 100vh;
   padding: 24px 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 22%),
-    var(--bg-sidebar);
+  background: var(--bg-sidebar);
   color: var(--text-inverse);
   display: flex;
   flex-direction: column;
@@ -112,7 +106,7 @@ a {
 .status-panel {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 16px;
+  border-radius: 8px;
 }
 
 .brand-panel {
@@ -125,8 +119,8 @@ a {
 .brand-mark {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f59e0b, #0f766e);
+  border-radius: 8px;
+  background: #d97706;
   display: grid;
   place-items: center;
   color: white;
@@ -170,7 +164,7 @@ a {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: 6px;
   cursor: pointer;
   transition: var(--transition-smooth);
   text-align: left;
@@ -258,11 +252,9 @@ a {
 
 .hero-band {
   padding: 28px;
-  border-radius: 24px;
+  border-radius: 8px;
   border: 1px solid rgba(15, 118, 110, 0.14);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 248, 238, 0.9)),
-    var(--bg-panel-strong);
+  background: var(--bg-panel-strong);
   box-shadow: var(--shadow-card);
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) auto;
@@ -302,7 +294,7 @@ a {
 .sample-card,
 .history-card {
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow: var(--shadow-soft);
 }
@@ -322,7 +314,7 @@ a {
 .metric-icon {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--teal-soft);
   color: var(--teal);
   display: grid;
@@ -346,6 +338,39 @@ a {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.signal-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-soft);
+}
+
+.signal-stat {
+  min-width: 0;
+  padding: 14px 18px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signal-stat:last-child {
+  border-right: none;
+}
+
+.signal-stat span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.signal-stat strong {
+  font-size: 17px;
+  text-align: right;
 }
 
 .pipeline-step {
@@ -418,7 +443,7 @@ a {
 .reasoning-board {
   background: #f7f3ed;
   border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 16px;
+  border-radius: 8px;
   min-height: 240px;
   padding: 14px 16px;
 }
@@ -502,7 +527,7 @@ a {
   align-items: flex-start;
   padding: 14px;
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.72);
 }
 
@@ -572,7 +597,7 @@ a {
   justify-content: center;
   gap: 8px;
   padding: 0 16px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid transparent;
   font-weight: 700;
   cursor: pointer;
@@ -596,7 +621,7 @@ a {
 }
 
 .btn-accent {
-  background: linear-gradient(135deg, #0f766e, #115e59);
+  background: #0f766e;
   color: white;
   box-shadow: 0 12px 24px rgba(15, 118, 110, 0.18);
 }
@@ -691,7 +716,7 @@ a {
 
 .terminal-shell,
 .terminal {
-  border-radius: 18px;
+  border-radius: 8px;
   overflow: hidden;
   border: 1px solid rgba(8, 19, 17, 0.16);
   background: var(--bg-terminal);
@@ -795,7 +820,7 @@ a {
 
 .reasoning-card {
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
   padding: 14px;
   box-shadow: var(--shadow-soft);
@@ -835,7 +860,7 @@ a {
 
 .action-card-item {
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.76);
   padding: 14px;
 }
@@ -880,7 +905,7 @@ a {
 
 .action-reasoning-box {
   margin-top: 10px;
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 12px;
   background: rgba(15, 118, 110, 0.06);
   border: 1px solid rgba(15, 118, 110, 0.12);
@@ -967,7 +992,7 @@ a {
 .form-control {
   width: 100%;
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: 6px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: var(--bg-input);
   padding: 0 14px;
@@ -1004,7 +1029,7 @@ a {
 .sku-list-item {
   width: 100%;
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.76);
   padding: 12px;
   cursor: pointer;
@@ -1036,7 +1061,7 @@ a {
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: cover;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
   background: white;
 }
@@ -1053,7 +1078,7 @@ a {
 }
 
 .product-kv {
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
   padding: 12px;
   background: rgba(255, 255, 255, 0.78);
@@ -1127,7 +1152,7 @@ a {
 }
 
 .email-draft-container {
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(248, 245, 239, 0.9);
   border: 1px solid var(--border-color);
   padding: 16px;
@@ -1159,6 +1184,45 @@ a {
 .empty-note,
 .empty-chart {
   padding: 20px 0;
+}
+
+.chart-frame {
+  width: 100%;
+  height: 320px;
+}
+
+.channel-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.channel-row {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.channel-row:last-child {
+  border-bottom: none;
+}
+
+.channel-row-main,
+.channel-row-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.channel-row-main span,
+.channel-row-metrics {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.channel-row-metrics {
+  margin-top: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
 }
 
 .spin {
@@ -1208,6 +1272,7 @@ a {
 
   .hero-band,
   .hero-metrics,
+  .signal-strip,
   .pipeline-strip,
   .dashboard-grid,
   .dashboard-grid-wide,
@@ -1215,6 +1280,15 @@ a {
   .config-grid,
   .product-summary-card {
     grid-template-columns: 1fr;
+  }
+
+  .signal-stat {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .signal-stat:last-child {
+    border-bottom: none;
   }
 }
 
@@ -1242,4 +1316,5 @@ a {
   .history-grid {
     grid-template-columns: 1fr;
   }
+
 }

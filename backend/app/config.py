@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # Pricing Alert Configuration
     ALERT_UNDERPRICE_THRESHOLD: float = 0.10  # 10%
     ALERT_OVERPRICE_THRESHOLD: float = 0.10  # 10%
+    PRICING_TARGET_SKU_COUNT: int = 200
+    PRICING_FRESHNESS_HOURS: int = 24
     AGENT_SCHEDULER_ENABLED: bool = True
     AGENT_SCHEDULE_INTERVAL_SECONDS: int = 86400
 

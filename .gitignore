@@ -19,6 +19,7 @@ pip-delete-this-directory.txt
 dmypy.json
 .ipynb_checkpoints
 .pytest_cache/
+tmp/
 
 # Databases & local logs
 *.db

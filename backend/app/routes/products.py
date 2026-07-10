@@ -26,7 +26,7 @@ def list_products(
     return query.offset(skip).limit(limit).all()
 
 
-@router.get("/{product_id}", response_model=schemas.ProductDetail)
+@router.get("/{product_id:int}", response_model=schemas.ProductDetail)
 def get_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
@@ -59,7 +59,7 @@ def create_product(product_in: schemas.ProductCreate, db: Session = Depends(get_
     return product
 
 
-@router.put("/{product_id}", response_model=schemas.Product)
+@router.put("/{product_id:int}", response_model=schemas.Product)
 def update_product(product_id: int, product_in: schemas.ProductUpdate, db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
@@ -78,7 +78,7 @@ def update_product(product_id: int, product_in: schemas.ProductUpdate, db: Sessi
     return product
 
 
-@router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{product_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
@@ -97,21 +97,18 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
     try:
         content = file.file.read()
         result = import_dataset_from_upload(db, file.filename or "", content)
-        from app.scraper.scraper_engine import scrape_realtime_competitor_prices
-
-        new_products = db.query(models.Product).all()
-        for product in new_products:
-            try:
-                scrape_realtime_competitor_prices(db, product.id)
-            except Exception:
-                pass
-
         return result | {
             "message": (
-                f"Imported {result['imported']} products, registered {result['competitor_links']} competitor links, "
-                f"and kicked off MVP scraping for each SKU."
+                f"Imported {result['imported']} products and registered {result['competitor_links']} competitor links. "
+                "The catalog is ready for the daily scheduler or a manual channel refresh."
             )
         }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
     except Exception as exc:
         db.rollback()
         raise HTTPException(

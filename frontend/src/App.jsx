@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useState } from 'react'
 import axios from 'axios'
 import {
   Activity,
@@ -8,13 +8,12 @@ import {
   Settings,
   ShieldAlert,
 } from 'lucide-react'
-import Overview from './pages/Overview.jsx'
-import ProductInsights from './pages/ProductInsights.jsx'
-import AgentWorkspace from './pages/AgentWorkspace.jsx'
-import Configuration from './pages/Configuration.jsx'
+import { API_BASE_URL } from './api.js'
 
-const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://localhost:8001'
-export const API_BASE_URL = `${API_ORIGIN}/api/v1`
+const Overview = lazy(() => import('./pages/Overview.jsx'))
+const ProductInsights = lazy(() => import('./pages/ProductInsights.jsx'))
+const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace.jsx'))
+const Configuration = lazy(() => import('./pages/Configuration.jsx'))
 
 const NAV_ITEMS = [
   { key: 'overview', label: 'Mission Control', icon: LayoutDashboard },
@@ -130,7 +129,11 @@ function App() {
         </div>
       </aside>
 
-      <main className="main-content">{renderContent()}</main>
+      <main className="main-content">
+        <Suspense fallback={<div className="loading-state">Loading workspace...</div>}>
+          {renderContent()}
+        </Suspense>
+      </main>
     </div>
   )
 }

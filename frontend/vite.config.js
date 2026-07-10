@@ -7,5 +7,17 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          charts: ['recharts'],
+          transport: ['axios'],
+          icons: ['lucide-react']
+        }
+      }
+    }
   }
 })

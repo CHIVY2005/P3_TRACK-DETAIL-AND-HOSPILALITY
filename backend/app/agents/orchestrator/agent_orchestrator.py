@@ -4,6 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db import models
+from app.agents.market_observer.market_observer_agent import build_alert_decision_context
 from app.agents.market_observer.market_observer_tools import refresh_market_prices
 from app.agents.margin_guardian.margin_guardian_agent import run_margin_guardian_for_alert
 from app.agents.shared.runtime_support import get_langfuse_client
@@ -57,11 +58,15 @@ def run_agentic_optimization_loop(
             db.commit()
 
         alerts = db.query(models.Alert).filter(models.Alert.is_resolved == False).all()
-        logs.append(f"[Reason] Detected {len(alerts)} unresolved alerts after refresh.")
+        selected_alerts = _select_priority_alerts(db, alerts, max_alerts)
+        logs.append(
+            f"[Reason] Detected {len(alerts)} unresolved alerts and selected "
+            f"{len(selected_alerts)} unique SKU decisions after ranking."
+        )
         task.logs = "\n".join(logs)
         db.commit()
 
-        if not alerts:
+        if not selected_alerts:
             logs.append("No active alerts. System remains stable.")
             task.status = "Completed"
             task.completed_at = datetime.utcnow()
@@ -69,18 +74,30 @@ def run_agentic_optimization_loop(
             db.commit()
             return task
 
-        for alert in alerts[:max_alerts]:
+        for alert in selected_alerts:
             agent_result = run_margin_guardian_for_alert(db, alert)
             for agent_log in agent_result.get("logs", []):
                 logs.append(f"  {agent_log}")
 
             for act in agent_result.get("actions_created", []):
+                pending_action = db.query(models.AgentAction).filter(
+                    models.AgentAction.product_id == alert.product_id,
+                    models.AgentAction.action_type == act["action_type"],
+                    models.AgentAction.status == "Pending",
+                ).first()
+                if pending_action:
+                    logs.append(
+                        f"  [Guardrail] Reused pending action #{pending_action.id}; "
+                        "no duplicate approval request created."
+                    )
+                    continue
+
                 action_record = models.AgentAction(
                     task_id=task.id,
                     product_id=alert.product_id,
                     action_type=act["action_type"],
                     description=act["description"],
-                    status="Pending" if act["action_type"] == "AUTO_PRICE_MATCH" else "Executed",
+                    status="Pending",
                     data=act["data"],
                 )
                 db.add(action_record)
@@ -120,3 +137,32 @@ def run_agentic_optimization_loop(
         task.logs = "\n".join(logs)
         db.commit()
         return task
+
+
+def _select_priority_alerts(db: Session, alerts: list, limit: int) -> list:
+    ranked = []
+    for alert in alerts:
+        context = build_alert_decision_context(db, alert)
+        if context.get("status") != "ready":
+            continue
+        severity = {"High": 0, "Medium": 1, "Low": 2}.get(context.get("severity"), 9)
+        ranked.append(
+            (
+                severity,
+                -abs(context.get("price_gap_pct", 0.0)),
+                context.get("margin_if_matched_pct", 0.0),
+                alert.id,
+                alert,
+            )
+        )
+
+    selected = []
+    seen_products = set()
+    for *_, alert in sorted(ranked):
+        if alert.product_id in seen_products:
+            continue
+        selected.append(alert)
+        seen_products.add(alert.product_id)
+        if len(selected) >= limit:
+            break
+    return selected

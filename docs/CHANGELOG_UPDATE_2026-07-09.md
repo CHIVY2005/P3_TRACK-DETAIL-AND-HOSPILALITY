@@ -233,3 +233,136 @@ Da bo sung lop giai thich co cau truc de dung voi brief `reasoning trace` va `hu
   - khong can suy nguoc tu logs thuan van ban nua
 
 Muc tieu la de operator khong chi thay action, ma con thay ro vi sao agent de xuat action do.
+
+## 13. Update 2026-07-10 - toi uu theo P3.pdf
+
+Da audit lai codebase theo cac outcome trong brief P3:
+
+- Top 200 SKU
+- CPI Guardian so voi tung competitor channel
+- daily freshness
+- voucher, bundle, flash sale va promotion mechanics
+- pricing gap / opportunity
+- giam thao tac theo doi thu cong
+- human-in-the-loop va explainability
+
+Khong co thay doi nao dua RAG hoac LLM quay lai pricing logic. Agent van thuan rule-based/template.
+
+## 14. Them omnichannel channel intelligence
+
+Them `backend/app/services/channel_intelligence.py` va endpoint:
+
+```text
+GET /api/v1/pricing/channel-index
+```
+
+Quy tac tinh:
+
+- lay dung mot latest observation cho moi cap `SKU + channel`
+- deterministic tie-break bang `scraped_at` va `id`
+- loai OOS, anomaly, gia rong, gia <= 0 va SKU khong co Guardian price hop le
+- tinh CPI tung SKU bang `Guardian / competitor effective price * 100`
+- tinh channel CPI bang trung binh price-relative, khong trung binh gia VND giua category
+
+Response moi co:
+
+- target / monitored SKU
+- target coverage
+- automated observation coverage
+- fresh observation trong SLA 24 gio
+- valid observation rate
+- overall va per-channel CPI
+- voucher / bundle / flash sale count
+- premium / value SKU va opportunity count
+
+## 15. Sua do chinh xac cua agent
+
+Da sua cac loi co the tao recommendation sai hoac trung:
+
+- agent khong con lay record moi nhat bat ky tren moi channel
+- voi undercut/overpriced, agent chon gia latest-clean thap nhat lam market reference
+- voi underpriced, agent chon market reference gan nhat phia tren Guardian de tang gia than trong
+- briefing deduplicate theo product, nen mot SKU chi xuat hien mot lan trong priority queue
+- orchestrator rank alert theo severity, price gap va margin
+- mot pending action cung product/type se duoc reuse thay vi tao duplicate
+- supplier draft cung chuyen sang `Pending` de dung human approval, khong con ghi `Executed` khi moi chi tao draft
+- approve action se resolve alert cua product cho ca price action va supplier action
+
+## 16. Hardening ingestion, seed va scraper
+
+Dynamic ingestion:
+
+- validate barcode, product name, category va Guardian price > 0 truoc khi reset catalog
+- duplicate barcode trong file bi skip va ghi ro row/error
+- neu upload khong co row hop le thi catalog cu duoc giu nguyen
+- reset + insert nam trong mot transaction
+- parser doc dung VND dang `136.000`, `136,000` va decimal
+- response co `received`, `data_quality_pct` va `validation_errors`
+
+Demo seed:
+
+- route product dung converter `/{product_id:int}`, nen `/seed-demo` va `/import-dataset` khong bi route dong bat nham
+- seed tao 200 products, 8.400 price observations va 1.200 competitor links
+- lich su 7 ngay duoc shift de latest observation trung voi thoi diem seed
+
+Scraper:
+
+- fallback gia deterministic theo ngay + barcode + channel
+- scraper status dem dung 6 channel va so record that
+- status co started time, products processed, channels attempted va last error
+- marketplace mapper tinh effective price sau explicit voucher hoac voucher dang `20k`
+- stock status duoc normalize ve `IN_STOCK` / `OUT_OF_STOCK`
+
+## 17. Dashboard va frontend
+
+Mission Control da duoc doi thanh operation scorecard:
+
+- brand signal `Guardian Pricing Intelligence`
+- `monitored / 200` target SKU
+- omnichannel CPI voi parity = 100
+- automated observation coverage
+- freshness 24 gio
+- valid observation, promotion signal, opportunity va latest signal age
+- channel CPI chart co parity reference line
+- promotion intelligence theo voucher / bundle / flash sale
+- decision audit trail thay cho nhan `reasoning trace`
+- priority queue khong lap SKU
+- status action hien dung Pending / Approved / Rejected
+
+SKU Insights:
+
+- bang competitor chi hien latest row cua moi channel
+- currency hien ro `VND`
+- chart sap xep bang ISO date va chi lay 7 ngay moi nhat
+
+Frontend build:
+
+- page duoc lazy-load
+- vendor duoc tach chunk cho React, charts, transport va icons
+- `npm.cmd run build` pass production
+
+## 18. Test va verification
+
+Them `backend/tests/` voi 9 test:
+
+- channel CPI dung latest clean observation
+- coverage, promo, bundle va flash metrics
+- voucher effective-price mapping
+- invalid import khong xoa catalog cu
+- VND parser va validation report
+- agent market reference
+- approve price action cap nhat Guardian price va recalculate CPI
+- static seed route
+- alert feed sap xep dung High -> Medium -> Low
+- full demo seed 200 / 8.400 / 1.200 / 6 channel
+
+Ket qua:
+
+```text
+9 passed
+frontend production build passed
+GET /api/v1/pricing/channel-index -> 200, 6 channels
+GET /api/v1/agent/briefing -> priority queue unique theo product
+```
+
+Browser skill khong co in-app browser tab trong phien verify nay, nen chua co screenshot desktop/mobile moi. Day la gioi han duy nhat cua lan visual QA nay; API, test va production build deu da pass.

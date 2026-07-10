@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import get_agent_config
 from app.db import models
 from app.agents.margin_guardian.margin_guardian_tools import compute_margin_scenarios, propose_price_match
+from app.agents.market_observer.market_observer_tools import get_alert_reference_price
 from app.agents.shared.runtime_support import (
     append_log,
     dumps_json,
@@ -131,12 +132,7 @@ def run_margin_guardian_for_alert(db: Session, alert: models.Alert) -> Dict[str,
     if not product:
         return {"status": "skipped", "reason": "No product"}
 
-    latest_price = (
-        db.query(models.CompetitorPrice)
-        .filter(models.CompetitorPrice.product_id == product.id)
-        .order_by(models.CompetitorPrice.scraped_at.desc())
-        .first()
-    )
+    latest_price = get_alert_reference_price(db, product, alert.alert_type)
     if not latest_price or latest_price.net_price is None:
         return {"status": "skipped", "reason": "No competitor prices"}
 

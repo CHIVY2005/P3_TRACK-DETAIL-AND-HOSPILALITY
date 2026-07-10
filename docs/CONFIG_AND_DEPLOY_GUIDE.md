@@ -9,7 +9,6 @@ Tao file `.env` o thu muc goc.
 Vi du:
 
 ```text
-OPENAI_API_KEY=your_openai_key
 APIFY_API_TOKEN=your_apify_token
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
@@ -20,11 +19,13 @@ DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_NAME=guardian_db
+PRICING_TARGET_SKU_COUNT=200
+PRICING_FRESHNESS_HOURS=24
 ```
 
 Luu y:
 
-- `OPENAI_API_KEY` hien khong con la dependency bat buoc cho agent pricing rule-based
+- agent pricing la rule-based/template va khong can `OPENAI_API_KEY`
 - neu khong co `APIFY_API_TOKEN`, scraper van chay theo fallback / simulated pricing
 - neu khong co Langfuse keys, tracing tu dong tat
 
@@ -117,7 +118,10 @@ Importer se:
 - map field aliases
 - tao `Product`
 - tao `CompetitorLink` neu co URL doi thu
-- scrape MVP cho tung SKU sau import
+- validate barcode, ten, category va gia ban truoc khi thay catalog
+- rollback neu import loi, nen catalog cu khong bi mat nua chung
+- tra `data_quality_pct` va toi da 20 validation errors
+- de daily scheduler hoac nut refresh thuc hien crawl sau import
 
 Field thuong dung:
 
@@ -151,6 +155,8 @@ Route nay:
 - doc `data/sku_master.csv`
 - doc `data/competitor_mock.csv`
 - insert lai data
+- tao 1.200 competitor links cho 200 SKU x 6 kenh
+- dich lich su 7 ngay de moc moi nhat trung voi thoi diem seed
 - tinh CPI va alerts
 
 ## 8. Langfuse
@@ -191,10 +197,12 @@ Neu scrape that bi chan:
 - dung fallback data trong scraper
 - van co the demo full luong CPI -> alert -> agent -> approval
 
-Neu frontend build bi vuong sandbox:
+Frontend production build da duoc verify bang:
 
-- uu tien chay `npm run dev`
-- ghi chu ro day la issue moi truong Vite/esbuild, khong phai bug nghiep vu trong app
+```powershell
+cd frontend
+npm.cmd run build
+```
 
 ## 11. Gioi han moi truong hien tai
 
@@ -202,6 +210,6 @@ Trong workspace nay da tung gap:
 
 - PowerShell block `npm.ps1`
   - workaround: dung `npm.cmd`
-- Vite/esbuild co the loi khi doc parent directories trong sandbox
+- Vite/esbuild co the bi sandbox chan quyen doc parent directory; production build ben ngoai sandbox da pass
 
 Hai diem nay nen duoc ghi nho de tranh mat thoi gian debug nham vao code app.

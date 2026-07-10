@@ -72,7 +72,7 @@ Y nghia tung agent:
 - `Margin Guardian`: tinh margin, quyet dinh `match` hay `negotiate`
 - `Supplier Negotiator`: tra policy theo rule/template, tao email draft
 - `Orchestrator`: dieu phoi toan bo vong chay agent
-- `Shared runtime`: log, Langfuse callback, tool execution wrapper
+- `Shared runtime`: log, Langfuse tracing client, tool execution wrapper
 
 ## 4. Luong du lieu end-to-end
 
@@ -214,6 +214,14 @@ VITE_API_ORIGIN=http://localhost:8001
 - `GET /api/v1/agent/config`
 - `POST /api/v1/agent/config`
 
+### Omnichannel intelligence
+
+- `GET /api/v1/pricing/channel-index`
+  - CPI theo tung kenh, voi `100` la parity
+  - coverage tren catalog 200 SKU
+  - freshness SLA 24 gio
+  - data quality, voucher, bundle, flash sale va pricing opportunity
+
 ### Sync
 
 - `POST /api/sync-price/{barcode}?platform=Hasaki`
@@ -263,17 +271,38 @@ Da co:
 - daily autonomous scheduler 1 ngay / lan
 - human approval workflow
 - UI dashboard moi theo kieu operator console
+- scorecard bam sat `P3.pdf`: 200 SKU, 6 kenh, CPI theo kenh, freshness va promotion intelligence
+- bo test backend chay full seed 200 SKU
 
 Con gioi han:
 
-- frontend build trong sandbox nay van co issue Vite/esbuild do no co xu huong doc parent directories
 - link discovery hien tai la MVP theo search URL, chua phai catalog matching production-grade
 - chua co queue worker, auth, audit log, va deployment production
 - scheduler hien tai la in-process background thread, hop cho MVP nhung chua phai distributed scheduler
 
-## 9. Tai lieu nen doc tiep
+## 9. Kiem thu
+
+```powershell
+cd backend
+..\.venv312\Scripts\python.exe -m pytest -q
+
+cd ..\frontend
+npm.cmd run build
+```
+
+Bo test hien tai kiem tra:
+
+- CPI theo kenh chi dung latest clean observation
+- effective price sau voucher
+- import transactional va parse gia VND
+- agent chon dung market reference
+- static seed route khong bi route product ID bat nham
+- full seed dung 200 SKU, 8.400 price rows, 1.200 links va 6 kenh
+
+## 10. Tai lieu nen doc tiep
 
 - [CODEBASE_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/CODEBASE_GUIDE.md)
 - [TECHNICAL_EXPLANATION.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/TECHNICAL_EXPLANATION.md)
 - [docs/CONFIG_AND_DEPLOY_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/CONFIG_AND_DEPLOY_GUIDE.md)
 - [docs/pitch_deck_draft.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/pitch_deck_draft.md)
+- [docs/JUDGE_DEMO_RUNBOOK.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/JUDGE_DEMO_RUNBOOK.md)

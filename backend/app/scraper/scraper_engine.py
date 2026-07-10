@@ -56,7 +56,7 @@ async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
             
             return {
                 "raw_price": raw_price,
-                "net_price": net_price,
+                "price": net_price,
                 "discount": discount,
                 "voucher_details": voucher,
                 "promo_mechanics": promo,
@@ -206,29 +206,32 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
     Fallback simulator pricing logic (runs if API keys are not provided).
     Simulates realistic price discrepancies, vouchers, and promos.
     """
+    daily_seed = f"{datetime.utcnow().date().isoformat()}:{barcode}:{competitor_name}"
+    rng = random.Random(daily_seed)
+
     if competitor_name == "Shopee":
-        price_factor = random.uniform(0.82, 0.98)
-        discount_pct = random.choice([0.0, 0.05, 0.10, 0.15])
-        voucher = random.choice([None, "Mã giảm 10k", "Mã giảm 20k", "Freeship Extra"])
-        promo = random.choice([None, "Mua kèm deal sốc", "Flash Sale"])
+        price_factor = rng.uniform(0.82, 0.98)
+        discount_pct = rng.choice([0.0, 0.05, 0.10, 0.15])
+        voucher = rng.choice([None, "Mã giảm 10k", "Mã giảm 20k", "Freeship Extra"])
+        promo = rng.choice([None, "Mua kèm deal sốc", "Flash Sale"])
     elif competitor_name == "Lazada":
-        price_factor = random.uniform(0.85, 0.97)
-        discount_pct = random.choice([0.0, 0.05, 0.08, 0.12])
-        voucher = random.choice([None, "Voucher tích lũy", "Mã giảm 15k"])
-        promo = random.choice([None, "Combo mua 2 giảm 5%", "Flash Sale"])
+        price_factor = rng.uniform(0.85, 0.97)
+        discount_pct = rng.choice([0.0, 0.05, 0.08, 0.12])
+        voucher = rng.choice([None, "Voucher tích lũy", "Mã giảm 15k"])
+        promo = rng.choice([None, "Combo mua 2 giảm 5%", "Flash Sale"])
     elif competitor_name == "TikTok Shop":
-        price_factor = random.uniform(0.78, 0.95)
-        discount_pct = random.choice([0.0, 0.10, 0.20])
-        voucher = random.choice([None, "Voucher Livestream 25k", "Mã người mới"])
-        promo = random.choice([None, "Flash Sale hàng hiệu"])
+        price_factor = rng.uniform(0.78, 0.95)
+        discount_pct = rng.choice([0.0, 0.10, 0.20])
+        voucher = rng.choice([None, "Voucher Livestream 25k", "Mã người mới"])
+        promo = rng.choice([None, "Flash Sale hàng hiệu"])
     elif competitor_name == "GrabMart":
-        price_factor = random.uniform(0.98, 1.15)
+        price_factor = rng.uniform(0.98, 1.15)
         discount_pct = 0.0
         voucher = None
         promo = None
     else:  # Pharmacity / website competitor
-        price_factor = random.uniform(0.95, 1.05)
-        discount_pct = random.choice([0.0, 0.05])
+        price_factor = rng.uniform(0.95, 1.05)
+        discount_pct = rng.choice([0.0, 0.05])
         voucher = None
         promo = None
 

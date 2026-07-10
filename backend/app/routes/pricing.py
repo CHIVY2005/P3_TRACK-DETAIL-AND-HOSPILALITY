@@ -5,8 +5,15 @@ from typing import List, Dict, Any
 from app.db.session import get_db
 from app.db import models
 from app import schemas
+from app.services.channel_intelligence import build_channel_intelligence
 
 router = APIRouter()
+
+
+@router.get("/channel-index", response_model=schemas.ChannelIntelligence)
+def get_channel_index(db: Session = Depends(get_db)):
+    """Return rubric-grade CPI, coverage, freshness, and promotion metrics per channel."""
+    return build_channel_intelligence(db)
 
 @router.get("/overview", response_model=schemas.OverviewStats)
 def get_overview_stats(db: Session = Depends(get_db)):

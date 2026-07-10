@@ -4,7 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.db.session import get_db
 from app.db import models
-from app.scraper.scraper_engine import run_scraper_for_all_products, scrape_realtime_competitor_prices
+from app.scraper.scraper_engine import COMPETITORS, run_scraper_for_all_products, scrape_realtime_competitor_prices
 from app import schemas
 from app.services.scraped_samples import load_branch_scrape_samples
 
@@ -16,24 +16,32 @@ class ScrapeTriggerRequest(BaseModel):
 # In-memory status for simplified hackathon boilerplate
 scraper_status = {
     "is_running": False,
+    "started_at": None,
     "last_run_completed": None,
-    "items_scraped": 0
+    "items_scraped": 0,
+    "products_processed": 0,
+    "channels_attempted": 0,
+    "last_error": None,
 }
 
 def bg_scrape_task(db_session: Session, product_id: Optional[int] = None):
     global scraper_status
-    scraper_status["is_running"] = True
     try:
         if product_id:
-            scrape_realtime_competitor_prices(db_session, product_id)
-            scraper_status["items_scraped"] = 5  # 5 competitors
+            records = scrape_realtime_competitor_prices(db_session, product_id)
+            scraper_status["items_scraped"] = len(records)
+            scraper_status["products_processed"] = 1
+            scraper_status["channels_attempted"] = len(COMPETITORS)
         else:
             results = run_scraper_for_all_products(db_session)
-            scraper_status["items_scraped"] = len(results) * 5
+            scraper_status["items_scraped"] = sum(len(records) for records in results.values())
+            scraper_status["products_processed"] = len(results)
+            scraper_status["channels_attempted"] = len(results) * len(COMPETITORS)
         
         from datetime import datetime
         scraper_status["last_run_completed"] = datetime.utcnow().isoformat()
     except Exception as e:
+        scraper_status["last_error"] = str(e)
         print(f"Scraper error: {e}")
     finally:
         scraper_status["is_running"] = False
@@ -48,6 +56,19 @@ def trigger_scrape(
     global scraper_status
     if scraper_status["is_running"]:
         return {"status": "already_running", "message": "Scrape task is currently running."}
+
+    from datetime import datetime
+
+    scraper_status.update(
+        {
+            "is_running": True,
+            "started_at": datetime.utcnow().isoformat(),
+            "items_scraped": 0,
+            "products_processed": 0,
+            "channels_attempted": 0,
+            "last_error": None,
+        }
+    )
 
     # We pass a new DB session for background tasks to avoid session sharing issues
     from app.db.session import SessionLocal

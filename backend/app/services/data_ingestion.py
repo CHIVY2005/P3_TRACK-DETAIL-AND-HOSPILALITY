@@ -31,7 +31,33 @@ PLATFORM_URL_FIELDS = {
 def import_dataset_from_upload(db: Session, filename: str, raw_content: bytes) -> Dict[str, Any]:
     records = _load_records(filename, raw_content)
     normalized = [_normalize_record(record) for record in records]
-    valid_rows = [row for row in normalized if row.get("barcode") and row.get("name") and row.get("category")]
+    valid_rows = []
+    validation_errors = []
+    seen_barcodes = set()
+
+    for index, row in enumerate(normalized, start=2):
+        errors = []
+        if not row.get("barcode"):
+            errors.append("missing barcode")
+        if not row.get("name"):
+            errors.append("missing product name")
+        if not row.get("category"):
+            errors.append("missing category")
+        if row.get("guardian_price", 0.0) <= 0:
+            errors.append("guardian price must be greater than zero")
+        if row.get("barcode") in seen_barcodes:
+            errors.append("duplicate barcode in upload")
+
+        if errors:
+            validation_errors.append({"row": index, "errors": errors})
+            continue
+
+        seen_barcodes.add(row["barcode"])
+        valid_rows.append(row)
+
+    if not valid_rows:
+        raise ValueError("Dataset contains no valid product rows.")
+
     skipped = len(normalized) - len(valid_rows)
 
     _reset_operational_tables(db)
@@ -69,8 +95,11 @@ def import_dataset_from_upload(db: Session, filename: str, raw_content: bytes) -
     return {
         "status": "success",
         "format": "json" if filename.lower().endswith(".json") else "csv",
+        "received": len(normalized),
         "imported": imported,
         "skipped": skipped,
+        "data_quality_pct": round(imported / len(normalized) * 100.0, 2) if normalized else 0.0,
+        "validation_errors": validation_errors[:20],
         "competitor_links": competitor_links,
         "message": f"Imported {imported} products and {competitor_links} competitor links.",
     }
@@ -134,8 +163,21 @@ def _pick_first(record: Dict[str, Any], aliases: Iterable[str]) -> str:
 def _parse_price(value: Any, default: Any) -> Any:
     if value in (None, ""):
         return default
+
     cleaned = "".join(ch for ch in str(value) if ch.isdigit() or ch in {".", ","})
-    cleaned = cleaned.replace(",", "")
+    if not cleaned:
+        return default
+
+    separators = [index for index, char in enumerate(cleaned) if char in {".", ","}]
+    if separators:
+        last_separator = separators[-1]
+        decimal_digits = len(cleaned) - last_separator - 1
+        if decimal_digits in {1, 2}:
+            integer_part = "".join(ch for ch in cleaned[:last_separator] if ch.isdigit())
+            decimal_part = "".join(ch for ch in cleaned[last_separator + 1 :] if ch.isdigit())
+            cleaned = f"{integer_part}.{decimal_part}"
+        else:
+            cleaned = "".join(ch for ch in cleaned if ch.isdigit())
     try:
         return float(cleaned)
     except ValueError:
@@ -151,4 +193,3 @@ def _reset_operational_tables(db: Session) -> None:
     if hasattr(models, "CompetitorLink"):
         db.query(models.CompetitorLink).delete()
     db.query(models.Product).delete()
-    db.commit()

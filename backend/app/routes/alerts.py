@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import case
 from typing import List
 from app.db.session import get_db
 from app.db import models
@@ -19,10 +20,14 @@ def list_alerts(
     if severity:
         query = query.filter(models.Alert.severity == severity)
         
-    # Sort by high severity first, then newest
+    severity_order = case(
+        (models.Alert.severity == "High", 0),
+        (models.Alert.severity == "Medium", 1),
+        (models.Alert.severity == "Low", 2),
+        else_=3,
+    )
     return query.order_by(
-        models.Alert.severity.desc(),  # Note: High, Medium, Low sort may need custom mapping if done in SQL, but desc sort is 'Medium', 'Low', 'High' alphabetically.
-        # Let's order by created_at desc for now.
+        severity_order,
         models.Alert.created_at.desc()
     ).all()
 

@@ -245,6 +245,19 @@ API nay gom:
 
 No bien backend thanh mot `read model` phuc vu rieng cho dashboard.
 
+Endpoint bo sung:
+
+- `GET /api/v1/pricing/channel-index`
+
+Endpoint nay khong lay trung binh gia VND giua cac category khac nhau. No tinh price-relative cho tung SKU:
+
+```text
+SKU channel CPI = Guardian price / latest clean competitor effective price * 100
+Channel CPI = average(SKU channel CPI)
+```
+
+Chi mot observation moi nhat cho moi cap `SKU + channel` duoc dung. OOS, gia rong, gia <= 0 va anomaly bi loai khoi mau so CPI. Response cung tra coverage, freshness 24 gio, data quality, voucher, bundle, flash sale va opportunity count.
+
 ## 11. Workflow 10: Daily autonomous cycle
 
 Theo brief `hybrid scheduler`, he thong hien tai da co luong chay ngam dinh ky.
@@ -304,8 +317,9 @@ No can bang duoc 3 dieu:
 - search-driven link discovery moi la MVP
 - chua co worker queue
 - chua co auth
-- frontend build trong sandbox nay van vuong Vite/esbuild do issue parent-directory permissions
 - scheduler hien tai la in-process thread, hop cho MVP nhung chua hop cho deployment nhieu instance
+
+Frontend production build da duoc verify ben ngoai sandbox bang `npm.cmd run build`.
 
 ## 15. Huong nang cap tiep
 

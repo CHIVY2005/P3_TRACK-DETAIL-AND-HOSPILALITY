@@ -97,11 +97,12 @@ Flow demo nen di:
 1. vao `Operations Config`
 2. bam seed demo hoac import dataset
 3. sang `Mission Control`
-4. show KPI, priority queue, reasoning trace
+4. show `200/200`, CPI theo 6 kenh, freshness, promotion intelligence va priority queue
 5. sang `SKU Insights` de show raw pricing va history
 6. sang `Agent Workspace` de run agent
-7. approve 1 `AUTO_PRICE_MATCH`
-8. quay lai dashboard cho thay state thay doi
+7. mo decision audit trail va Langfuse trace
+8. approve 1 `AUTO_PRICE_MATCH`
+9. quay lai dashboard cho thay state thay doi
 
 ## Slide 7. Gia tri business
 
@@ -125,6 +126,9 @@ Noi dung:
 - hybrid scraping
 - anomaly filter
 - CPI + alert engine
+- channel CPI voi parity = 100
+- coverage / freshness / data quality scorecard
+- voucher / bundle / flash sale intelligence
 - agent architecture tach folder
 - approval workflow
 - UI command center
@@ -137,6 +141,11 @@ Noi dung:
 - scrape that chua o muc production 200 SKU
 - queue worker, auth, audit log chua co
 
+Bang chung MVP khong nen bi noi qua:
+
+- fixture demo phu 200 SKU x 6 kenh va 7 ngay
+- `automated observation coverage` la proxy ky thuat, chua phai ket qua do manual effort tai pilot that
+
 Thong diep:
 
 He thong da giai quyet dung huong bai toan va da co duong nang cap ro rang.
@@ -145,7 +154,7 @@ He thong da giai quyet dung huong bai toan va da co duong nang cap ro rang.
 
 Noi dung:
 
-1. dua Postgres + pgvector thanh data mode chinh
+1. dua Postgres thanh data mode chinh
 2. nang cap link discovery thanh matching service
 3. tach scraper va agent sang worker queue
 4. them auth, audit log, va deployment

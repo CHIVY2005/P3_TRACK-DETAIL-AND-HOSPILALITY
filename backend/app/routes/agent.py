@@ -12,6 +12,8 @@ from app.db.session import get_db
 from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_client
 from app.services.agent_engine import build_alert_decision_context
 from app.services.agent_runtime import create_agent_task, get_agent_runtime_status, is_agent_running, run_agent_task
+from app.services.channel_intelligence import build_channel_intelligence
+from app.services.cpi_calculator import calculate_cpi_for_product
 from app.services.daily_scheduler import get_scheduler_status
 
 router = APIRouter()
@@ -55,13 +57,16 @@ def trigger_agent_run(
 @router.get("/briefing", response_model=schemas.AgentBriefing)
 def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
     active_alerts = db.query(models.Alert).filter(models.Alert.is_resolved == False).all()
-    decisions = []
+    decisions_by_product = {}
     for alert in active_alerts:
         context = build_alert_decision_context(db, alert)
         if context.get("status") == "ready":
-            decisions.append(context)
+            existing = decisions_by_product.get(context["product_id"])
+            if existing is None or _decision_sort_key(context) < _decision_sort_key(existing):
+                decisions_by_product[context["product_id"]] = context
 
     severity_rank = {"High": 0, "Medium": 1, "Low": 2}
+    decisions = list(decisions_by_product.values())
     decisions.sort(
         key=lambda item: (
             severity_rank.get(item["severity"], 9),
@@ -70,40 +75,21 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
         )
     )
 
-    channel_rows = db.query(
-        models.CompetitorPrice.competitor_name,
-        func.avg(models.CompetitorPrice.net_price),
-        func.count(func.distinct(models.CompetitorPrice.product_id)),
-    ).filter(
-        models.CompetitorPrice.net_price.isnot(None),
-        models.CompetitorPrice.stock_status != "OUT_OF_STOCK",
-        models.CompetitorPrice.is_suspicious == False,
-    ).group_by(models.CompetitorPrice.competitor_name).all()
-
-    channel_alert_counts = {
-        row[0]: row[1]
-        for row in db.query(
-            models.CompetitorPrice.competitor_name,
-            func.count(models.Alert.id),
-        ).join(
-            models.Alert,
-            models.Alert.product_id == models.CompetitorPrice.product_id,
-        ).filter(
-            models.Alert.is_resolved == False,
-            models.CompetitorPrice.net_price.isnot(None),
-            models.CompetitorPrice.stock_status != "OUT_OF_STOCK",
-            models.CompetitorPrice.is_suspicious == False,
-        ).group_by(models.CompetitorPrice.competitor_name).all()
-    }
-
+    channel_intelligence = build_channel_intelligence(db)
     channel_summary = [
         schemas.AgentBriefingChannel(
-            channel=channel,
-            avg_net_price=round(avg_net_price or 0.0, 2),
-            sku_coverage=sku_coverage,
-            alert_count=channel_alert_counts.get(channel, 0),
+            channel=item["channel"],
+            avg_net_price=item["avg_net_price"],
+            sku_coverage=item["sku_coverage"],
+            alert_count=item["opportunity_count"],
+            cpi=item["cpi"],
+            coverage_pct=item["coverage_pct"],
+            freshness_pct=item["freshness_pct"],
+            promotion_sku=item["promotion_sku"],
+            opportunity_count=item["opportunity_count"],
         )
-        for channel, avg_net_price, sku_coverage in channel_rows
+        for item in channel_intelligence["channels"]
+        if item["observation_coverage_pct"] > 0
     ]
     channel_summary.sort(key=lambda item: (-item.alert_count, item.channel))
 
@@ -121,7 +107,7 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
             high_severity_alerts=high_alerts,
             pending_actions=pending_actions,
             average_cpi=round(average_cpi, 2),
-            channels_covered=len(channel_summary),
+            channels_covered=channel_intelligence["summary"]["channels_with_data"],
             last_scrape_at=last_scrape_at,
         ),
         priority_queue=[schemas.AgentBriefingPriority(**item) for item in decisions[:limit]],
@@ -170,6 +156,7 @@ def approve_agent_action(action_id: int, db: Session = Depends(get_db)):
 
         def _approve_action():
             action.status = "Approved"
+            product = None
 
             if action.action_type == "AUTO_PRICE_MATCH":
                 payload = json.loads(action.data)
@@ -178,15 +165,20 @@ def approve_agent_action(action_id: int, db: Session = Depends(get_db)):
                 if product and new_price:
                     product.guardian_price = float(new_price)
 
-                unresolved_alerts = db.query(models.Alert).filter(
-                    models.Alert.product_id == action.product_id,
-                    models.Alert.is_resolved == False,
-                ).all()
-                for alert in unresolved_alerts:
-                    alert.is_resolved = True
+            unresolved_alerts = db.query(models.Alert).filter(
+                models.Alert.product_id == action.product_id,
+                models.Alert.is_resolved == False,
+            ).all()
+            for alert in unresolved_alerts:
+                alert.is_resolved = True
 
             db.commit()
-            return {"status": "success", "message": "Action approved and executed successfully."}
+            if product:
+                calculate_cpi_for_product(db, product.id)
+                message = "Price action approved, applied, and CPI recalculated."
+            else:
+                message = "Supplier action approved for commercial handoff."
+            return {"status": "success", "message": message}
 
         if client:
             with client.start_as_current_observation(
@@ -286,3 +278,12 @@ def get_runtime_status():
         "agent": get_agent_runtime_status(),
         "scheduler": get_scheduler_status(),
     }
+
+
+def _decision_sort_key(item: dict):
+    severity_rank = {"High": 0, "Medium": 1, "Low": 2}
+    return (
+        severity_rank.get(item.get("severity"), 9),
+        -abs(item.get("price_gap_pct", 0.0)),
+        item.get("margin_if_matched_pct", 0.0),
+    )

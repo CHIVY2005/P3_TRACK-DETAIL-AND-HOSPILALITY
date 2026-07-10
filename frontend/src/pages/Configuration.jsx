@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Database, RefreshCw, Save, SlidersHorizontal, UploadCloud } from 'lucide-react'
-import { API_BASE_URL } from '../App.jsx'
+import { API_BASE_URL } from '../api.js'
 
 function Configuration() {
   const [underpriceThreshold, setUnderpriceThreshold] = useState(10)

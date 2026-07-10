@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.db.models import Product, CompetitorPrice, PricingIndex, Alert
-from app.config import settings, get_agent_config
+from app.config import get_agent_config
+from app.services.channel_intelligence import get_latest_channel_observations
 
 def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
     # 1. Fetch product
@@ -9,19 +9,8 @@ def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
     if not product:
         raise ValueError(f"Product with id {product_id} not found")
 
-    # 2. Fetch latest competitor prices (grouped by competitor_name, taking the most recent scrape)
-    # For a simple boilerplate, we take all competitor prices in the last run or just the latest entries.
-    # Let's query the latest price for each competitor name for this product
-    subquery = db.query(
-        CompetitorPrice.competitor_name,
-        func.max(CompetitorPrice.scraped_at).label("max_scraped_at")
-    ).filter(CompetitorPrice.product_id == product_id).group_by(CompetitorPrice.competitor_name).subquery()
-
-    latest_prices = db.query(CompetitorPrice).join(
-        subquery,
-        (CompetitorPrice.competitor_name == subquery.c.competitor_name) & 
-        (CompetitorPrice.scraped_at == subquery.c.max_scraped_at)
-    ).filter(CompetitorPrice.product_id == product_id).all()
+    # 2. Fetch one deterministic latest observation per competitor channel.
+    latest_prices = get_latest_channel_observations(db, product_id=product_id)
 
     if not latest_prices:
         # No competitor prices, default to neutral

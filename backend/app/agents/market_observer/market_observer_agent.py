@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_agent_config
 from app.db import models
-from app.agents.market_observer.market_observer_tools import get_latest_clean_competitor_price
+from app.agents.market_observer.market_observer_tools import get_alert_reference_price
 
 
 def build_alert_decision_context(db: Session, alert: models.Alert) -> Dict[str, Any]:
@@ -12,7 +12,7 @@ def build_alert_decision_context(db: Session, alert: models.Alert) -> Dict[str, 
     if not product:
         return {"status": "skipped", "reason": "missing_product"}
 
-    latest_price = get_latest_clean_competitor_price(db, product.id)
+    latest_price = get_alert_reference_price(db, product, alert.alert_type)
     if not latest_price:
         return {"status": "skipped", "reason": "missing_competitor_price"}
 
@@ -22,13 +22,21 @@ def build_alert_decision_context(db: Session, alert: models.Alert) -> Dict[str, 
     margin_if_matched_pct = ((latest_price.net_price - product.cost_price) / latest_price.net_price) * 100 if latest_price.net_price else 0.0
     price_gap_pct = ((product.guardian_price - latest_price.net_price) / product.guardian_price) * 100 if product.guardian_price else 0.0
 
+    is_guardian_value = latest_price.net_price > product.guardian_price
     if margin_if_matched_pct >= min_margin_pct:
         strategy = "match"
-        recommended_action = "Approve price match"
-        rationale = (
-            f"Competitor {latest_price.competitor_name} is cheaper by {price_gap_pct:.1f}% and margin after matching "
-            f"remains {margin_if_matched_pct:.1f}% above the floor of {min_margin_pct:.1f}%."
-        )
+        recommended_action = "Approve market-aligned price"
+        if is_guardian_value:
+            rationale = (
+                f"Guardian is {abs(price_gap_pct):.1f}% below the nearest clean market reference at "
+                f"{latest_price.competitor_name}. Aligning upward keeps margin at {margin_if_matched_pct:.1f}% "
+                f"above the floor of {min_margin_pct:.1f}%."
+            )
+        else:
+            rationale = (
+                f"{latest_price.competitor_name} is cheaper by {price_gap_pct:.1f}% and margin after matching "
+                f"remains {margin_if_matched_pct:.1f}% above the floor of {min_margin_pct:.1f}%."
+            )
     else:
         strategy = "negotiate"
         recommended_action = "Draft supplier protection request"

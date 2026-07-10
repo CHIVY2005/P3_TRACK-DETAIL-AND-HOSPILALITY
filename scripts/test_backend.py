@@ -1,13 +1,15 @@
 import sys
+import os
 import requests
 import json
 
-BASE_URL = "http://localhost:8000/api/v1"
+API_ORIGIN = os.getenv("API_ORIGIN", "http://127.0.0.1:8001").rstrip("/")
+BASE_URL = f"{API_ORIGIN}/api/v1"
 
 def test_health():
     print("Testing health check...")
     try:
-      res = requests.get("http://localhost:8000/")
+      res = requests.get(f"{API_ORIGIN}/")
       print(f"Status code: {res.status_code}")
       print(f"Response: {res.json()}")
       return res.status_code == 200
@@ -32,9 +34,18 @@ def test_pricing_overview():
     print(f"Metrics: {json.dumps(res.json(), indent=2)}")
     return res.status_code == 200
 
-def test_trigger_scraper():
-    print("\nTesting trigger mock scraper...")
-    res = requests.post(f"{BASE_URL}/scraper/trigger", json={})
+
+def test_channel_intelligence():
+    print("\nTesting omnichannel CPI and coverage...")
+    res = requests.get(f"{BASE_URL}/pricing/channel-index")
+    payload = res.json()
+    print(f"Status code: {res.status_code}")
+    print(f"Summary: {json.dumps(payload.get('summary', {}), indent=2, default=str)}")
+    return res.status_code == 200 and len(payload.get("channels", [])) > 0
+
+def test_trigger_scraper(product_id):
+    print("\nTesting one-SKU scraper trigger...")
+    res = requests.post(f"{BASE_URL}/scraper/trigger", json={"product_id": product_id})
     print(f"Status code: {res.status_code}")
     print(f"Response: {res.json()}")
     return res.status_code in [200, 202]
@@ -58,7 +69,7 @@ def test_list_agent_tasks():
 
 if __name__ == "__main__":
     print("=== STARTING BACKEND BOILERPLATE API TESTS ===")
-    print("Ensure uvicorn is running: uvicorn app.main:app --reload (inside backend folder)")
+    print("Ensure uvicorn is running on 127.0.0.1:8001 (inside backend folder)")
     print("==============================================")
     
     if not test_health():
@@ -67,7 +78,10 @@ if __name__ == "__main__":
         
     test_list_products()
     test_pricing_overview()
-    test_trigger_scraper()
+    test_channel_intelligence()
+    products = requests.get(f"{BASE_URL}/products").json()
+    if products:
+        test_trigger_scraper(products[0]["id"])
     test_trigger_agent()
     test_list_agent_tasks()
     

@@ -395,13 +395,12 @@ App shell:
 
 Man tong quan:
 
-- hero story
-- metrics
-- pipeline strip
-- live reasoning trace
-- priority queue
-- channel price map
-- scrape evidence
+- Top 200 SKU scorecard
+- omnichannel CPI voi parity = 100
+- automation coverage va freshness 24 gio
+- decision audit trail
+- priority decisions khong lap SKU
+- promotion intelligence theo voucher / bundle / flash sale
 - alert feed
 - recent actions
 
@@ -454,6 +453,7 @@ Neu muon:
 - doi discovery strategy: `services/link_discovery.py`
 - doi scrape mapping: `services/platform_mappers.py`
 - doi logic CPI: `services/cpi_calculator.py`
+- doi read model CPI da kenh: `services/channel_intelligence.py`
 - doi agent decision: `agents/margin_guardian/`
 - doi supplier workflow: `agents/supplier_negotiator/`
 - doi dashboard tong quan: `frontend/src/pages/Overview.jsx`
@@ -467,8 +467,11 @@ On dinh de demo:
 - seed demo
 - import dataset
 - CPI + alert engine
+- CPI / coverage / freshness theo tung kenh
 - agent approval flow
 - dashboard views
+- production frontend build
+- backend test suite 200 SKU
 
 MVP / can nang cap tiep:
 
@@ -476,5 +479,4 @@ MVP / can nang cap tiep:
 - queue worker
 - auth
 - deployment production
-- frontend build issue trong moi truong sandbox nay
 - scheduler hien tai la in-process thread, chua phai distributed scheduler
