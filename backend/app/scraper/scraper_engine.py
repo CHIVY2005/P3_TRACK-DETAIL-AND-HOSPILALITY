@@ -6,11 +6,13 @@ from sqlalchemy.orm import Session
 from app.db import models
 from app.config import settings
 from app.services.cpi_calculator import calculate_cpi_for_product
+from app.services.link_discovery import ensure_competitor_link
+from app.services.platform_mappers import map_marketplace_result
 
 # List of competitor channels
 COMPETITORS = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity", "Hasaki"]
 
-async def scrape_via_apify(barcode: str, competitor_name: str) -> dict:
+async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
     """
     Integrates Apify API using the user's Apify platform credits.
     Triggers a marketplace search actor on Shopee or Lazada to find live pricing.
@@ -29,7 +31,7 @@ async def scrape_via_apify(barcode: str, competitor_name: str) -> dict:
         
         # Configure search payload
         run_input = {
-            "search": barcode,
+            "search": search_target,
             "maxItems": 1,
             "proxy": {
                 "useApifyProxy": True
@@ -65,7 +67,7 @@ async def scrape_via_apify(barcode: str, competitor_name: str) -> dict:
         
     return None
 
-async def scrape_via_crawl4ai(barcode: str, competitor_name: str) -> dict:
+async def scrape_via_crawl4ai(barcode: str, competitor_name: str, target_url: str | None = None) -> dict:
     """
     Integrates Crawl4AI to crawl competitor pharmacy/health websites (e.g. Hasaki, Pharmacity)
     and parse HTML into structured price grids using markdown extraction.
@@ -79,7 +81,9 @@ async def scrape_via_crawl4ai(barcode: str, competitor_name: str) -> dict:
         
         # Build search URL
         search_url = ""
-        if competitor_name == "Pharmacity":
+        if target_url:
+            search_url = target_url
+        elif competitor_name == "Pharmacity":
             search_url = f"https://www.pharmacity.vn/tim-kiem?q={barcode}"
         else: # GrabMart search simulation
             search_url = f"https://grab.com/mart/search?q={barcode}"
@@ -111,7 +115,7 @@ async def scrape_via_crawl4ai(barcode: str, competitor_name: str) -> dict:
         
     return None
 
-async def scrape_via_playwright(barcode: str, competitor_name: str) -> dict:
+async def scrape_via_playwright(barcode: str, competitor_name: str, target_url: str | None = None) -> dict:
     """
     Direct Playwright scraper for Hasaki and TikTok Shop.
     Launches a headless browser, waits for JS rendering (networkidle),
@@ -129,7 +133,9 @@ async def scrape_via_playwright(barcode: str, competitor_name: str) -> dict:
     import re
     
     url = ""
-    if competitor_name == "Hasaki":
+    if target_url:
+        url = target_url
+    elif competitor_name == "Hasaki":
         url = f"https://hasaki.vn/catalogsearch/result/?q={barcode}"
     elif competitor_name == "TikTok Shop":
         url = f"https://www.tiktok.com/search?q={barcode}"
@@ -195,7 +201,7 @@ async def scrape_via_playwright(barcode: str, competitor_name: str) -> dict:
         
     return None
 
-def simulate_competitor_price(product_guardian_price: float, competitor_name: str, barcode: str) -> dict:
+def simulate_competitor_price(product_guardian_price: float, competitor_name: str, barcode: str, fallback_url: str | None = None) -> dict:
     """
     Fallback simulator pricing logic (runs if API keys are not provided).
     Simulates realistic price discrepancies, vouchers, and promos.
@@ -239,7 +245,7 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
         net_price = max(1000, net_price - voucher_val)
 
     comp_slug = competitor_name.lower().replace(" ", "")
-    url = f"https://www.{comp_slug}.vn/search?q={barcode}"
+    url = fallback_url or f"https://www.{comp_slug}.vn/search?q={barcode}"
 
     return {
         "raw_price": raw_price,
@@ -263,23 +269,30 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
     new_prices = []
     
     for competitor in COMPETITORS:
+        link = ensure_competitor_link(db, product, competitor)
         price_data = None
         
         # 1. Try real Apify integration for Shopee/Lazada
         if competitor in ["Shopee", "Lazada"]:
-            price_data = await scrape_via_apify(product.barcode, competitor)
+            price_data = await scrape_via_apify(product.name or product.barcode, competitor)
             
         # 2. Try direct Playwright for Hasaki / TikTok Shop
         if not price_data and competitor in ["Hasaki", "TikTok Shop"]:
-            price_data = await scrape_via_playwright(product.barcode, competitor)
+            price_data = await scrape_via_playwright(product.barcode, competitor, link.url if link else None)
             
         # 3. Try Crawl4AI for independent web pages
         if not price_data and competitor in ["Pharmacity", "GrabMart"]:
-            price_data = await scrape_via_crawl4ai(product.barcode, competitor)
+            price_data = await scrape_via_crawl4ai(product.barcode, competitor, link.url if link else None)
             
         # 3. Fallback to mock simulator if no data was fetched
         if not price_data:
-            price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode)
+            price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode, link.url if link else None)
+        elif competitor in ["Shopee", "Lazada"]:
+            price_data = map_marketplace_result(competitor, price_data, link.url if link else None)
+
+        if link and price_data.get("url") and link.url != price_data["url"]:
+            link.url = price_data["url"]
+            link.discovery_method = "scraped"
 
         # Check for price anomalies using the historical cross-validation helper
         from app.services.cpi_calculator import check_price_anomaly

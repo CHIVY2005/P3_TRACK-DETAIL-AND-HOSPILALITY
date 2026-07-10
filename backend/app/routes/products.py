@@ -1,5 +1,3 @@
-import csv
-import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -9,6 +7,7 @@ from app import schemas
 from app.db import models
 from app.db.session import get_db
 from app.services.cpi_calculator import calculate_cpi_for_product
+from app.services.data_ingestion import import_dataset_from_upload
 from app.services.demo_seed import seed_demo_dataset
 
 router = APIRouter()
@@ -95,63 +94,9 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 @router.post("/import-csv", status_code=status.HTTP_201_CREATED)
 def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file must be a .csv",
-        )
-
     try:
-        content = file.file.read().decode("utf-8")
-        csv_file = io.StringIO(content)
-        reader = csv.DictReader(csv_file)
-
-        imported_count = 0
-        skipped_count = 0
-
-        db.query(models.Alert).delete()
-        db.query(models.PricingIndex).delete()
-        db.query(models.CompetitorPrice).delete()
-        db.query(models.Product).delete()
-        db.commit()
-
-        for row in reader:
-            barcode = row.get("barcode", "").strip()
-            name = row.get("name", "").strip()
-            category = row.get("category", "").strip()
-            guardian_price_str = row.get("guardian_price", "0").strip()
-
-            if not barcode or not name or not category:
-                skipped_count += 1
-                continue
-
-            try:
-                guardian_price = float(guardian_price_str)
-            except ValueError:
-                skipped_count += 1
-                continue
-
-            cost_price_str = row.get("cost_price", "").strip()
-            try:
-                cost_price = float(cost_price_str) if cost_price_str else round(guardian_price * 0.60, -3)
-            except ValueError:
-                cost_price = round(guardian_price * 0.60, -3)
-
-            product = models.Product(
-                barcode=barcode,
-                name=name,
-                category=category,
-                guardian_price=guardian_price,
-                cost_price=cost_price,
-                image_url=(row.get("image_url") or "").strip()
-                or "https://images.unsplash.com/photo-1608248597481-496100c8c836?w=500&auto=format&fit=crop&q=60",
-                description=(row.get("description") or "").strip() or f"{name} distributed at Guardian.",
-            )
-            db.add(product)
-            imported_count += 1
-
-        db.commit()
-
+        content = file.file.read()
+        result = import_dataset_from_upload(db, file.filename or "", content)
         from app.scraper.scraper_engine import scrape_realtime_competitor_prices
 
         new_products = db.query(models.Product).all()
@@ -161,11 +106,11 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
             except Exception:
                 pass
 
-        return {
-            "status": "success",
-            "message": f"Imported {imported_count} products. Skipped {skipped_count} invalid rows.",
-            "imported": imported_count,
-            "skipped": skipped_count,
+        return result | {
+            "message": (
+                f"Imported {result['imported']} products, registered {result['competitor_links']} competitor links, "
+                f"and kicked off MVP scraping for each SKU."
+            )
         }
     except Exception as exc:
         db.rollback()
@@ -173,6 +118,11 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to import CSV: {exc}",
         )
+
+
+@router.post("/import-dataset", status_code=status.HTTP_201_CREATED)
+def import_products_dataset(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    return import_products_csv(file, db)
 
 
 @router.post("/seed-demo", status_code=status.HTTP_201_CREATED)

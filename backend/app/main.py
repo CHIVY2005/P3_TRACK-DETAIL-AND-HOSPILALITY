@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.agents.shared.runtime_support import shutdown_langfuse
 from app.db.session import engine, Base
-from app.routes import products, pricing, alerts, scraper, agent
+from app.routes import products, pricing, alerts, scraper, agent, sync
+from app.services.daily_scheduler import start_daily_scheduler, stop_daily_scheduler
 
 # Create database tables automatically for the hackathon environment.
 # This ensures that once the user runs the project, the tables are auto-created.
@@ -32,6 +34,18 @@ app.include_router(pricing.router, prefix=f"{settings.API_V1_STR}/pricing", tags
 app.include_router(alerts.router, prefix=f"{settings.API_V1_STR}/alerts", tags=["Alerts"])
 app.include_router(scraper.router, prefix=f"{settings.API_V1_STR}/scraper", tags=["Scraper Controls"])
 app.include_router(agent.router, prefix=f"{settings.API_V1_STR}/agent", tags=["AI Agent Workspace"])
+app.include_router(sync.router, prefix="/api", tags=["Sync"])
+
+
+@app.on_event("startup")
+def on_startup():
+    start_daily_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_daily_scheduler()
+    shutdown_langfuse()
 
 @app.get("/")
 def read_root():

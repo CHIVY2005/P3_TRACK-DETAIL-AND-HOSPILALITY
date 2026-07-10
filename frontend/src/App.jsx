@@ -1,13 +1,27 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
-import { LayoutDashboard, Tag, Cpu, Settings, AlertTriangle, ShieldCheck } from 'lucide-react'
+import {
+  Activity,
+  Bot,
+  LayoutDashboard,
+  PackageSearch,
+  Settings,
+  ShieldAlert,
+} from 'lucide-react'
 import Overview from './pages/Overview.jsx'
 import ProductInsights from './pages/ProductInsights.jsx'
 import AgentWorkspace from './pages/AgentWorkspace.jsx'
 import Configuration from './pages/Configuration.jsx'
 
-// Base URL for Backend API
-export const API_BASE_URL = 'http://localhost:8000/api/v1'
+const API_ORIGIN = import.meta.env.VITE_API_ORIGIN || 'http://localhost:8001'
+export const API_BASE_URL = `${API_ORIGIN}/api/v1`
+
+const NAV_ITEMS = [
+  { key: 'overview', label: 'Mission Control', icon: LayoutDashboard },
+  { key: 'products', label: 'SKU Insights', icon: PackageSearch },
+  { key: 'agent', label: 'Agent Workspace', icon: Bot },
+  { key: 'config', label: 'Operations Config', icon: Settings },
+]
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -15,23 +29,24 @@ function App() {
   const [agentRunning, setAgentRunning] = useState(false)
   const [alertCount, setAlertCount] = useState(0)
 
-  // Fetch status of background processes periodically
   useEffect(() => {
     const fetchStatuses = async () => {
       try {
-        // Scraper status
-        const scraperRes = await axios.get(`${API_BASE_URL}/scraper/status`)
-        setScraperRunning(scraperRes.data.is_running)
+        const [scraperRes, tasksRes, alertsRes] = await Promise.all([
+          axios.get(`${API_BASE_URL}/scraper/status`),
+          axios.get(`${API_BASE_URL}/agent/tasks?limit=1`),
+          axios.get(`${API_BASE_URL}/alerts`),
+        ])
 
-        // Agent status
-        const tasksRes = await axios.get(`${API_BASE_URL}/agent/tasks?limit=1`)
-        if (tasksRes.data.length > 0) {
-          setAgentRunning(tasksRes.data[0].status === 'Running' || tasksRes.data[0].status === 'Pending')
-        }
-
-        // Active alerts
-        const alertsRes = await axios.get(`${API_BASE_URL}/alerts`)
+        setScraperRunning(Boolean(scraperRes.data?.is_running))
         setAlertCount(alertsRes.data.length)
+
+        if (tasksRes.data.length > 0) {
+          const status = tasksRes.data[0].status
+          setAgentRunning(status === 'Running' || status === 'Pending')
+        } else {
+          setAgentRunning(false)
+        }
       } catch (err) {
         console.error('Failed to connect to backend API. Ensure FastAPI is running.', err)
       }
@@ -58,96 +73,64 @@ function App() {
   }
 
   return (
-    <div className="app-container">
-      {/* Sidebar Panel */}
+    <div className="app-shell">
       <aside className="sidebar">
-        <div className="logo-container">
-          <div className="logo-icon">🛡️</div>
-          <div className="logo-text">
-            GUARDIAN
-            <span>Price Intelligence</span>
+        <div className="brand-panel">
+          <div className="brand-mark">
+            <ShieldAlert size={18} />
+          </div>
+          <div className="brand-copy">
+            <strong>Guardian Pricing OS</strong>
+            <span>Hackathon MVP command layer</span>
           </div>
         </div>
 
-        <nav>
-          <ul className="nav-links">
-            <li>
-              <a 
-                className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
-                onClick={() => setActiveTab('overview')}
+        <div className="sidebar-cluster">
+          <div className="sidebar-section-label">Navigate</div>
+          <nav className="nav-links">
+            {NAV_ITEMS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                className={`nav-item ${activeTab === key ? 'active' : ''}`}
+                onClick={() => setActiveTab(key)}
               >
-                <LayoutDashboard size={20} />
-                Tổng quan
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`nav-item ${activeTab === 'products' ? 'active' : ''}`}
-                onClick={() => setActiveTab('products')}
-              >
-                <Tag size={20} />
-                Sản phẩm (SKU)
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`nav-item ${activeTab === 'agent' ? 'active' : ''}`}
-                onClick={() => setActiveTab('agent')}
-              >
-                <Cpu size={20} />
-                AI Agent Control
-                {agentRunning && <span className="status-dot active" style={{ marginLeft: 'auto' }} />}
-              </a>
-            </li>
-            <li>
-              <a 
-                className={`nav-item ${activeTab === 'config' ? 'active' : ''}`}
-                onClick={() => setActiveTab('config')}
-              >
-                <Settings size={20} />
-                Cấu hình hệ thống
-              </a>
-            </li>
-          </ul>
-        </nav>
+                <Icon size={18} />
+                <span>{label}</span>
+                {key === 'agent' && agentRunning ? <span className="status-pill live">Live</span> : null}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-        {/* System Health Indicators */}
-        <div className="sidebar-footer">
-          <div className="sidebar-footer-title">Trạng thái hệ thống</div>
-          
-          <div className="sidebar-footer-status" style={{ marginTop: '8px' }}>
-            <span className={`status-dot ${scraperRunning ? 'active' : 'idle'}`} />
-            <span style={{ color: scraperRunning ? '#10b981' : '#94a3b8' }}>
-              Scraper: {scraperRunning ? 'Đang chạy...' : 'Nghỉ'}
+        <div className="status-panel">
+          <div className="sidebar-section-label">System pulse</div>
+          <div className="status-row">
+            <div className="status-row-label">
+              <Activity size={14} />
+              <span>Scraper</span>
+            </div>
+            <span className={`status-pill ${scraperRunning ? 'good' : 'muted'}`}>
+              {scraperRunning ? 'Running' : 'Idle'}
             </span>
           </div>
-
-          <div className="sidebar-footer-status">
-            <span className={`status-dot ${agentRunning ? 'active' : 'idle'}`} style={{ color: agentRunning ? '#6366f1' : '#f59e0b' }} />
-            <span style={{ color: agentRunning ? '#6366f1' : '#94a3b8' }}>
-              AI Agent: {agentRunning ? 'Đang tối ưu...' : 'Sẵn sàng'}
+          <div className="status-row">
+            <div className="status-row-label">
+              <Bot size={14} />
+              <span>Agent</span>
+            </div>
+            <span className={`status-pill ${agentRunning ? 'warn' : 'muted'}`}>
+              {agentRunning ? 'Thinking' : 'Ready'}
             </span>
           </div>
-
-          {alertCount > 0 && (
-            <div className="sidebar-footer-status" style={{ color: '#ef4444', fontWeight: 'bold' }}>
-              <AlertTriangle size={14} />
-              Cảnh báo: {alertCount} SKU
-            </div>
-          )}
-          {alertCount === 0 && (
-            <div className="sidebar-footer-status" style={{ color: '#10b981' }}>
-              <ShieldCheck size={14} />
-              Cạnh tranh an toàn
-            </div>
-          )}
+          <div className="status-summary">
+            <strong>{alertCount}</strong>
+            <span>open pricing alerts</span>
+          </div>
         </div>
       </aside>
 
-      {/* Main Screen Router */}
-      <main className="main-content">
-        {renderContent()}
-      </main>
+      <main className="main-content">{renderContent()}</main>
     </div>
   )
 }

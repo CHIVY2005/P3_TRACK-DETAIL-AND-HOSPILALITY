@@ -1,553 +1,480 @@
 # CODEBASE GUIDE
 
-Tai lieu nay giai thich toan bo codebase cua du an GUARDIAN theo dung trang thai hien tai. Muc tieu la de:
+Tai lieu nay mo ta codebase theo goc nhin kien truc va ownership: file nao giu vai tro gi, sua cho nao khi muon mo rong, va luong du lieu chay qua cac module nhu the nao.
 
-- onboarding nhanh cho teammate
-- hieu duoc luong du lieu va luong suy luan cua agent
-- biet file nao quan trong khi can sua de demo hoac mo rong
-
-## 1. Muc tieu san pham
-
-GUARDIAN la mot pricing intelligence dashboard cho Guardian. Thay vi chi hien thi analytics, no co them mot agent de:
-
-1. Phat hien san pham dang co van de gia
-2. Ly giai xem co nen match gia hay khong
-3. Tao hanh dong cho con nguoi duyet
-
-Vay nen codebase co 3 lop lon:
-
-- data va pricing engine
-- agent reasoning layer
-- dashboard va approval UI
-
-## 2. Thu muc goc
+## 1. Ban do repo
 
 ```text
-backend/                  FastAPI app
-frontend/                 React app
-scripts/                  script tao mock data va test nhanh
-data/                     CSV du lieu demo
-docs/                     de bai, pitch draft, preview
-dataset_shopee-*.json     scrape sample tu branch_of_Duy
-README.md                 huong dan su dung
-TECHNICAL_EXPLANATION.md  tai lieu cu giai thich ky thuat
-CODEBASE_GUIDE.md         tai lieu nay
+backend/
+  app/
+    agents/        agent architecture moi
+    db/            SQLAlchemy session + models
+    routes/        REST APIs
+    scraper/       hybrid scraping runtime
+    services/      ingestion, pricing, seed, adapters
+    config.py
+    schemas.py
+    main.py
+  data/            config va knowledge files
+
+frontend/
+  src/
+    pages/         4 man hinh chinh
+    App.jsx        app shell
+    index.css      design system + layout
+
+scripts/           test va mock data scripts
+data/              CSV demo
+docs/              docs cho pitch, deploy, architecture
 ```
 
-## 3. Backend
+## 2. Backend entrypoints
 
-Backend nam trong `backend/app/`.
+### `backend/app/main.py`
 
-### 3.1 `main.py`
+Entry point cua FastAPI. File nay:
 
-File [backend/app/main.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/main.py) la entrypoint cua FastAPI.
+1. tao app
+2. bat CORS
+3. auto create tables
+4. dang ky routers:
+   - `products`
+   - `pricing`
+   - `alerts`
+   - `scraper`
+   - `agent`
+   - `sync`
 
-No lam 4 viec:
+Neu mot route moi khong hien len `/docs`, day la noi can kiem tra dau tien.
 
-- khoi tao app
-- bat CORS
-- auto create database tables
-- dang ky routers cho `products`, `pricing`, `alerts`, `scraper`, `agent`
+### `backend/app/config.py`
 
-### 3.2 `config.py`
-
-File [backend/app/config.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/config.py) chua:
+Giu:
 
 - bien moi truong
-- cau hinh SQLite/Postgres
-- default thresholds
-- doc va ghi `backend/data/config.json`
+- config database
+- config scraper
+- threshold mac dinh
+- doc / ghi `backend/data/config.json`
 
-Phan quan trong o day la `get_agent_config()` va `save_agent_config()`. Frontend trang Configuration goi vao 2 ham nay qua API.
+Hai ham quan trong:
 
-### 3.3 Database layer
+- `get_agent_config()`
+- `save_agent_config()`
 
-#### `db/session.py`
+## 3. Database layer
 
-File [backend/app/db/session.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/db/session.py):
+### `backend/app/db/session.py`
 
-- tao `engine`
-- tao `SessionLocal`
-- expose dependency `get_db()`
+Giu:
 
-#### `db/models.py`
+- `engine`
+- `SessionLocal`
+- `Base`
+- dependency `get_db()`
 
-File [backend/app/db/models.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/db/models.py) la trung tam du lieu.
+### `backend/app/db/models.py`
 
-Bang chinh:
+Day la schema trung tam cua toan he thong.
 
-- `Product`
-  - SKU cua Guardian
-  - co `barcode`, `name`, `category`, `guardian_price`, `cost_price`
+#### `Product`
 
-- `CompetitorPrice`
-  - 1 lan ghi nhan gia doi thu
-  - co `raw_price`, `discount`, `net_price`, `stock_status`, `is_suspicious`
+Catalog san pham noi bo:
 
-- `PricingIndex`
-  - CPI cua 1 product
-  - co `competitor_index`, `average_competitor_price`, `recommendation`
+- `barcode`
+- `name`
+- `category`
+- `guardian_price`
+- `cost_price`
+- `image_url`
+- `description`
 
-- `Alert`
-  - canh bao khi Guardian overpriced, underpriced, hoac bi undercut
+#### `CompetitorLink`
 
-- `AgentTask`
-  - 1 lan chay agent
-  - chua `objective`, `status`, `logs`
+Bang moi de giu link doi thu theo tung product:
 
-- `AgentAction`
-  - hanh dong agent tao ra
-  - vi du `AUTO_PRICE_MATCH`, `SUPPLIER_EMAIL_DRAFT`
+- `product_id`
+- `platform`
+- `url`
+- `discovery_method`
 
-Neu muon demo hay them logic moi, day la noi dau tien can hieu.
+Bang nay cho phep ingestion, discovery, va scrape that noi voi nhau.
 
-### 3.4 Pydantic schemas
+#### `CompetitorPrice`
 
-File [backend/app/schemas.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/schemas.py) map model DB ra API response.
+Moi lan doc duoc gia doi thu se tao 1 record:
 
-Phan moi quan trong:
+- `competitor_name`
+- `raw_price`
+- `discount`
+- `net_price`
+- `stock_status`
+- `is_suspicious`
+- `voucher_details`
+- `promo_mechanics`
+- `url`
+- `scraped_at`
 
-- `AgentBriefingSummary`
-- `AgentBriefingChannel`
-- `AgentBriefingPriority`
-- `AgentBriefing`
-- `ScrapeSample`
+#### `PricingIndex`
 
-Nhung schema nay phuc vu cho trang mission control moi.
+Ket qua tinh toan CPI cho tung product:
 
-## 4. Backend routes
+- `competitor_index`
+- `average_competitor_price`
+- `recommendation`
 
-### 4.1 `routes/products.py`
+#### `Alert`
 
-File [backend/app/routes/products.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/routes/products.py) xu ly:
+Tin hieu business de agent va dashboard su dung:
+
+- `alert_type`
+- `message`
+- `severity`
+- `is_resolved`
+
+#### `AgentTask`
+
+Phien chay cua agent:
+
+- `objective`
+- `status`
+- `logs`
+
+#### `AgentAction`
+
+Hanh dong agent tao ra:
+
+- `AUTO_PRICE_MATCH`
+- `SUPPLIER_EMAIL_DRAFT`
+
+## 4. Routes
+
+### `backend/app/routes/products.py`
+
+Ownership:
 
 - CRUD product
-- import CSV
-- seed demo dataset bang `POST /products/seed-demo`
+- import dataset
+- seed demo dataset
 
-Day la noi de reset data nhanh truoc khi demo.
+Diem can nho:
 
-Route moi quan trong:
+- route cu `import-csv` van duoc giu de tuong thich
+- route moi `import-dataset` ho tro ca `csv` va `json`
 
-- `POST /api/v1/products/seed-demo`
+### `backend/app/routes/pricing.py`
 
-Route nay goi service `seed_demo_dataset()` de nap:
+Ownership:
 
-- `data/sku_master.csv`
-- `data/competitor_mock.csv`
+- `overview` cho KPI top-level
+- `cpi-index` cho danh sach SKU va CPI
 
-va sau do tinh lai CPI va alerts.
+### `backend/app/routes/alerts.py`
 
-### 4.2 `routes/pricing.py`
+Ownership:
 
-File [backend/app/routes/pricing.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/routes/pricing.py) expose dashboard data:
-
-- `GET /pricing/overview`
-- `GET /pricing/cpi-index`
-
-`overview` dung cho KPI tong quan.
-
-`cpi-index` dung cho list SKU trong trang Product Insights.
-
-### 4.3 `routes/alerts.py`
-
-File [backend/app/routes/alerts.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/routes/alerts.py):
-
-- list alerts
+- list alert
 - resolve alert
 
-Trang Overview va Product UI deu dung endpoint nay.
+### `backend/app/routes/scraper.py`
 
-### 4.4 `routes/scraper.py`
+Ownership:
 
-File [backend/app/routes/scraper.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/routes/scraper.py):
+- trigger scrape background
+- xem status scrape
+- doc scrape evidence tu branch crawl
 
-- `POST /scraper/trigger`
-- `GET /scraper/status`
-- `GET /scraper/branch-samples`
+### `backend/app/routes/agent.py`
 
-`branch-samples` la route moi de doc evidence tu `branch_of_Duy`.
+Ownership:
 
-### 4.5 `routes/agent.py`
-
-File [backend/app/routes/agent.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/routes/agent.py) la route quan trong nhat cho theme agentic AI.
-
-Nhiem vu:
-
-- chay agent background
-- expose task history
-- expose action history
+- trigger agent run
+- list task va actions
 - expose `agent/briefing`
+- expose runtime + scheduler status
 - approve / reject action
 - doc / ghi config
 
-`GET /agent/briefing` la endpoint moi tong hop:
+### `backend/app/routes/sync.py`
 
-- active alerts
-- priority queue
-- channel summary
-- latest task
-- pending action count
+Ownership:
 
-Nghia la frontend khong can tu ghep du lieu tu 5 endpoint nua.
+- sync gia theo barcode va platform
+- noi `Product` -> `CompetitorLink` -> scrape -> `CompetitorPrice`
 
-## 5. Backend services
+Route nay la cau noi truc tiep nhat giua ingestion va huong crawl data.
 
-### 5.1 `services/cpi_calculator.py`
+## 5. Services
 
-File [backend/app/services/cpi_calculator.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/services/cpi_calculator.py) chua pricing logic cot loi.
+### `backend/app/services/data_ingestion.py`
+
+MVP ingestion engine.
+
+Nhiem vu:
+
+1. doc `csv` hoac `json`
+2. tu map field aliases
+3. tao `Product`
+4. tao `CompetitorLink` neu co URL
+5. reset cac bang van hanh truoc khi import
+
+Sua file nay neu:
+
+- format file moi can support
+- muon them field aliases
+- muon doi chinh sach reset khi import
+
+### `backend/app/services/link_discovery.py`
+
+Nhiem vu:
+
+- tao search-driven competitor link neu product chua co URL
+- giu lai logic theo tung platform
+
+Sua file nay neu:
+
+- muon them platform moi
+- muon doi kieu discovery
+- muon tich hop matching service that
+
+### `backend/app/services/platform_mappers.py`
+
+Nhiem vu:
+
+- chuan hoa payload raw scrape thanh schema noi bo
+- gop ten truong khac nhau tu marketplace ve mot shape chung
+
+### `backend/app/services/cpi_calculator.py`
+
+Pricing engine cot loi.
 
 Ham quan trong:
 
 - `calculate_cpi_for_product()`
-  - lay gia doi thu moi nhat cua tung channel
-  - bo qua `OUT_OF_STOCK`, `net_price = None`, va `is_suspicious = True`
-  - tinh average competitor price
-  - tinh CPI
-  - dua ra recommendation
-
 - `generate_alerts_for_product()`
-  - tao alert theo threshold
-  - tao alert severity cao khi doi thu undercut manh
-
 - `check_price_anomaly()`
-  - so gia moi voi lich su 10 lan scrape sach gan nhat
-  - neu lech qua 50% thi danh dau suspicious
 
-Ham nay giai quyet mot diem pitch quan trong: du lieu scrape khong duoc tin mu quang.
+Sua file nay neu can doi logic CPI, threshold behavior, hoac anomaly detection.
 
-### 5.2 `services/agent_engine.py`
+### `backend/app/services/demo_seed.py`
 
-File [backend/app/services/agent_engine.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/services/agent_engine.py) la trai tim cua agent.
+Reset du lieu demo:
 
-No co 2 tang:
+- xoa bang cu
+- doc `data/sku_master.csv`
+- doc `data/competitor_mock.csv`
+- insert lai data
+- tinh CPI va alerts
 
-#### Tang 1: helper cho dashboard
+### `backend/app/services/scraped_samples.py`
 
-- `build_alert_decision_context()`
+Doc scrape evidence tu file JSON branch crawl.
 
-Ham nay lay 1 alert va bien no thanh 1 object de frontend hieu duoc:
+Nhiem vu:
 
-- product nao dang gap van de
-- competitor nao dang re hon
-- neu match thi margin con bao nhieu
-- nen `match` hay `negotiate`
-- ly do bang text
+- mo file raw
+- chuan hoa title, price, url
+- thu match listing voi catalog hien tai
 
-Day la logic dung cho `GET /agent/briefing`.
+### `backend/app/services/agent_engine.py`
 
-#### Tang 2: autonomous loop
+File nay khong con la logic lon nua. No da tro thanh compatibility layer:
 
-- `run_agentic_optimization_loop()`
-- `run_langgraph_agent_for_alert()`
-- `node_run_margin_analysis()`
-- `node_determine_strategy()`
-- `node_apply_auto_match()`
-- `node_draft_supplier_negotiation()`
+- re-export `build_alert_decision_context`
+- re-export `run_agentic_optimization_loop`
 
-Ngoai ra, agent bay gio co mot tool layer ro rang:
+Muc dich la de route cu va code khac khong bi gay.
 
-- `tool_compute_margin_scenarios()`
-- `tool_propose_price_match()`
-- `tool_lookup_supplier_policy()`
-- `tool_generate_supplier_email()`
+### `backend/app/services/agent_runtime.py`
 
-Tat ca deu duoc chay qua `_run_agent_tool()`. Ham nay co 3 vai tro:
+Nhiem vu:
 
-- ghi log tool call vao `AgentTask.logs`
-- gom tool event thanh cau truc co ten / input / output / status
-- tu dong tao Langfuse tool observation neu credentials hop le
+- tao `AgentTask`
+- giu lock de tranh manual run va scheduled run chong len nhau
+- luu runtime status cua agent
 
-Luong suy nghi:
+### `backend/app/services/daily_scheduler.py`
 
-1. Lay tat ca unresolved alerts
-2. Chay qua tung alert
-3. Phan tich margin
-4. Xac dinh strategy
-5. Tao `AgentAction`
-6. Ghi log vao `AgentTask`
+Nhiem vu:
 
-Neu co OpenAI key thi no co the goi LLM. Neu khong, no fallback sang rule-based logic.
+- khoi dong scheduler cung app
+- moi 1 ngay chay 1 autonomous cycle
+- refresh market data truoc khi reasoning
+- bo qua tick neu agent dang chay
 
-Neu co Langfuse key that thi:
+## 6. Agents
 
-- ca root agent run duoc trace
-- moi alert run duoc trace thanh child span
-- moi tool call duoc trace thanh observation type `tool`
-- LLM strategy call duoc gan Langfuse callback qua LangChain
+### `agents/market_observer`
 
-### 5.3 `services/demo_seed.py`
+Day la lop doc signal thi truong cho dashboard va orchestrator.
 
-File [backend/app/services/demo_seed.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/services/demo_seed.py) moi duoc them de phuc vu demo.
+Quan ly:
 
-No:
+- lay latest clean competitor price
+- bien 1 alert thanh decision context de frontend doc duoc
 
-- clear du lieu cu
-- doc 2 file CSV trong `data/`
-- insert lai Product va CompetitorPrice
-- tinh toan CPI va alerts
+### `agents/margin_guardian`
 
-Rat huu ich truoc khi presentation, vi reset chi bang 1 API call.
+Day la lop quyet dinh chinh.
 
-### 5.4 `services/scraped_samples.py`
+Quan ly:
 
-File [backend/app/services/scraped_samples.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/services/scraped_samples.py) doc 2 file scrape sample tu `branch_of_Duy`.
+- tinh current margin
+- tinh margin if matched
+- chon `match` hay `negotiate`
+- tao action `AUTO_PRICE_MATCH`
 
-No lam 3 viec:
+### `agents/supplier_negotiator`
 
-- mo file JSON scrape
-- chuan hoa truong title / price / discount / url
-- thu match item scrape voi product catalog bang token overlap rat nhe
+Quan ly:
 
-No khong phai matching engine production. No la lop "evidence adapter" de dashboard show duoc:
+- lookup supplier policy
+- tao email draft
+- tao action `SUPPLIER_EMAIL_DRAFT`
 
-- branch nay co scrape that
-- listing nao lien quan den catalog hien tai
+### `agents/orchestrator`
 
-## 6. Scraper layer
+Quan ly:
 
-### 6.1 `scraper/scraper_engine.py`
+- khoi tao `AgentTask`
+- option refresh market data
+- loop unresolved alerts
+- goi margin guardian / supplier negotiator
+- persist actions va logs
 
-File [backend/app/scraper/scraper_engine.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/scraper/scraper_engine.py) chua rat nhieu che do scrape:
+### `agents/shared/runtime_support.py`
 
-- `scrape_via_apify()` cho Shopee / Lazada
-- `scrape_via_crawl4ai()` cho web nhu Pharmacity / GrabMart
-- `scrape_via_playwright()` cho Hasaki / TikTok Shop
-- `simulate_competitor_price()` de fallback khi khong co key
+Quan ly:
 
-Flow thuc te:
+- append logs
+- append tool events
+- run tool wrapper
+- Langfuse client / callback
 
-1. tim product theo `product_id`
-2. thu scrape tung competitor theo plugin / channel phu hop
-3. neu that bai thi simulate
-4. check anomaly
-5. save vao `CompetitorPrice`
-6. recalculate CPI
+### `agents/orchestrator` va scheduler
 
-### 6.2 `scraper/mock_scraper.py`
+`orchestrator` la noi quyet dinh 1 phien chay agent lam gi.
 
-File nay la version gia lap cu hon. Co the xem nhu reference hoac fallback.
+`daily_scheduler.py` la noi quyet dinh khi nao phien chay do duoc kich hoat tu dong.
 
-## 7. Frontend
+## 7. Scraper layer
 
-### 7.1 `src/App.jsx`
+### `backend/app/scraper/scraper_engine.py`
 
-File [frontend/src/App.jsx](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/App.jsx):
+Trung tam scrape.
 
-- giu `activeTab`
+Modes:
+
+- `scrape_via_apify()`
+- `scrape_via_crawl4ai()`
+- `scrape_via_playwright()`
+- `simulate_competitor_price()`
+
+Flow:
+
+1. lay product
+2. dam bao co `CompetitorLink`
+3. thu scrape theo channel
+4. map payload raw ve schema chung
+5. check anomaly
+6. save `CompetitorPrice`
+7. recalculate CPI
+
+## 8. Frontend
+
+### `frontend/src/App.jsx`
+
+App shell:
+
+- nav 4 tab
 - poll scraper status
-- poll agent task va alert count
-- render 4 man:
-  - Overview
-  - ProductInsights
-  - AgentWorkspace
-  - Configuration
+- poll latest agent status
+- hien open alert count
 
-No dong vai tro shell cua toan bo app.
+### `frontend/src/pages/Overview.jsx`
 
-### 7.2 `src/pages/Overview.jsx`
+Man tong quan:
 
-File [frontend/src/pages/Overview.jsx](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/pages/Overview.jsx) da duoc doi huong manh sang hackathon demo.
-
-No fetch:
-
-- `pricing/overview`
-- `alerts`
-- `agent/briefing`
-- `agent/actions`
-- `scraper/branch-samples`
-
-No hien thi:
-
-- mission band
-- KPI
+- hero story
+- metrics
+- pipeline strip
 - live reasoning trace
 - priority queue
-- channel pricing map
-- branch scrape evidence
+- channel price map
+- scrape evidence
 - alert feed
-- recent agent actions
+- recent actions
 
-Neu ban chi co 2 phut demo, day la man hinh nen chieu dau tien.
+### `frontend/src/pages/ProductInsights.jsx`
 
-### 7.3 `src/pages/ProductInsights.jsx`
+Man drill-down:
 
-File [frontend/src/pages/ProductInsights.jsx](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/pages/ProductInsights.jsx) dung de drill-down theo SKU.
+- search SKU
+- chon product
+- xem metric card
+- bang net price
+- chart lich su gia
 
-Chuc nang:
+### `frontend/src/pages/AgentWorkspace.jsx`
 
-- tim SKU
-- chon SKU
-- xem image, category, barcode
-- xem bang net price cua tung competitor
-- xem chart 7 ngay
+Man operator:
 
-No la man "chung minh bo du lieu khong chi la KPI top-level".
+- run agent
+- xem terminal logs
+- xem action queue
+- approve / reject
+- doc supplier draft
+- xem task history
 
-### 7.4 `src/pages/AgentWorkspace.jsx`
+### `frontend/src/pages/Configuration.jsx`
 
-File [frontend/src/pages/AgentWorkspace.jsx](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/pages/AgentWorkspace.jsx):
+Man van hanh:
 
-- trigger `POST /agent/run`
-- poll task dang chay
-- hien terminal style logs
-- hien danh sach actions
-- approve / reject price match
-- xem supplier email draft
+- chinh thresholds
+- upload dataset CSV/JSON
+- reset demo
 
-Day la man "agent operator console".
+### `frontend/src/index.css`
 
-### 7.5 `src/pages/Configuration.jsx`
+Day la design system chinh:
 
-File [frontend/src/pages/Configuration.jsx](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/pages/Configuration.jsx):
+- color tokens
+- layout shell
+- cards
+- data table
+- terminal shell
+- modal
+- responsive rules
 
-- doc / ghi `agent/config`
-- upload CSV
-- seed lai demo dataset
+## 9. File nen sua theo nhu cau
 
-Button reset hien tai da duoc sua de goi `POST /products/seed-demo`, khong con goi scraper trigger nhu truoc.
+Neu muon:
 
-### 7.6 `src/index.css`
+- doi logic import dataset: `services/data_ingestion.py`
+- doi discovery strategy: `services/link_discovery.py`
+- doi scrape mapping: `services/platform_mappers.py`
+- doi logic CPI: `services/cpi_calculator.py`
+- doi agent decision: `agents/margin_guardian/`
+- doi supplier workflow: `agents/supplier_negotiator/`
+- doi dashboard tong quan: `frontend/src/pages/Overview.jsx`
+- doi shell toan app: `frontend/src/App.jsx`
+- doi visual system: `frontend/src/index.css`
 
-File [frontend/src/index.css](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/frontend/src/index.css) la lop style lon nhat.
+## 10. Phan nao on dinh, phan nao la MVP
 
-No chua:
+On dinh de demo:
 
-- palette mau
-- glass cards
-- sidebar
-- terminal styles
-- dashboard layouts
-- mission control components moi
+- seed demo
+- import dataset
+- CPI + alert engine
+- agent approval flow
+- dashboard views
 
-Neu can sua giao dien nhanh truoc demo, day la file can cham vao.
+MVP / can nang cap tiep:
 
-## 8. Du lieu va tai nguyen demo
-
-### 8.1 `data/sku_master.csv`
-
-Master data cho product catalog demo.
-
-### 8.2 `data/competitor_mock.csv`
-
-Lich su gia competitor demo.
-
-### 8.3 `scripts/generate_mock_data.py`
-
-File [scripts/generate_mock_data.py](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/scripts/generate_mock_data.py) tao 200 SKU va 8400 competitor records.
-
-No:
-
-- random brand / category / volume
-- random gia Guardian
-- random factor theo tung competitor
-- random voucher / promo
-- random OOS
-- random suspicious cases
-
-Nghia la data demo kha phong phu cho hackathon.
-
-### 8.4 `dataset_shopee-scraper_*.json`
-
-Day la scrape sample tu `branch_of_Duy`.
-
-- `...05-01-14-978.json` co 1 listing that
-- `...04-32-31-501.json` la sample mock cua actor
-
-No duoc dung de lam bang chung cho huong scrape that trong mission control.
-
-## 9. Luong du lieu end-to-end
-
-### Luong 1: seed demo
-
-1. Frontend goi `POST /products/seed-demo`
-2. Backend clear DB
-3. Backend doc CSV
-4. Backend insert Product + CompetitorPrice
-5. Backend tinh CPI + tao alerts
-6. Frontend refresh dashboard
-
-### Luong 2: scrape / refresh gia
-
-1. Frontend goi `POST /scraper/trigger`
-2. Backend chay scraper background
-3. Từng product duoc ghi them competitor prices
-4. CPI va alerts duoc cap nhat
-
-### Luong 3: chay agent
-
-1. Frontend goi `POST /agent/run`
-2. Backend tao `AgentTask`
-3. Agent tu refresh competitor prices truoc
-4. CPI va alerts duoc cap nhat tu du lieu moi
-5. Agent lay unresolved alerts
-6. Agent phan tich margin
-7. Agent quyet dinh `match` hoac `negotiate`
-8. Agent tao `AgentAction`
-9. Frontend poll va hien logs
-
-### Luong 4: approve action
-
-1. User bam approve
-2. Frontend goi `POST /agent/actions/{id}/approve`
-3. Backend cap nhat `guardian_price`
-4. Backend resolve alerts lien quan
-
-## 10. Cac file can sua theo tung nhu cau
-
-Neu muon...
-
-- doi logic CPI: sua `backend/app/services/cpi_calculator.py`
-- doi logic agent: sua `backend/app/services/agent_engine.py`
-- doi reset data demo: sua `backend/app/services/demo_seed.py`
-- doi evidence scrape sample: sua `backend/app/services/scraped_samples.py`
-- doi dashboard tong quan: sua `frontend/src/pages/Overview.jsx`
-- doi man agent terminal: sua `frontend/src/pages/AgentWorkspace.jsx`
-- doi giao dien toan cuc: sua `frontend/src/index.css`
-
-## 11. Diem manh va gioi han
-
-### Diem manh
-
-- Demo duoc ngay, khong can phu thuoc full infra
-- Co agent flow ro rang
-- Co human approval
-- Co data history
-- Co branch scrape evidence that
-
-### Gioi han
-
-- Chua co queue worker that
-- Chua co production-grade matching catalog
-- Chua co auth
-- Frontend build trong moi truong hien tai van co van de Vite/esbuild do parent directory permissions
-
-## 12. Thu tu nen demo
-
-Thu tu de pitch on nhat:
-
-1. Seed demo dataset
-2. Mo Overview
-3. Noi ve mission control va branch evidence
-4. Chuyen sang Product Insights de show raw pricing detail
-5. Quay lai Agent Workspace, bam run agent
-6. Approve 1 action
-7. Ket bang Configuration de cho thay threshold co the dieu chinh
-
-## 13. Ket luan
-
-Codebase nay khong con la boilerplate rong nua. No da co:
-
-- pricing engine
-- alert engine
-- agent reasoning loop
-- approval workflow
-- branch scrape evidence
-- demo data path on dinh
-
-Neu can day tiep sau hackathon, huong dung nhat la:
-
-- thay sample scrape bang pipeline scrape that
-- nang cap matching giua listing scrape va catalog noi bo
-- dua background jobs ra worker queue
-- bo sung auth va audit log
+- matching link doi thu production-grade
+- queue worker
+- auth
+- deployment production
+- frontend build issue trong moi truong sandbox nay
+- scheduler hien tai la in-process thread, chua phai distributed scheduler

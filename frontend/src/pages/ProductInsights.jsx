@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { ExternalLink, Search } from 'lucide-react'
 import { API_BASE_URL } from '../App.jsx'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { Search, ExternalLink, ShieldCheck, AlertTriangle } from 'lucide-react'
 
 function ProductInsights() {
   const [products, setProducts] = useState([])
@@ -11,7 +11,6 @@ function ProductInsights() {
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 1. Fetch all products on load
   useEffect(() => {
     const fetchProducts = async () => {
       try {
@@ -27,10 +26,10 @@ function ProductInsights() {
         setLoading(false)
       }
     }
+
     fetchProducts()
   }, [])
 
-  // 2. Fetch selected product detail
   useEffect(() => {
     if (!selectedProductId) return
 
@@ -42,262 +41,251 @@ function ProductInsights() {
         console.error('Error fetching product detail', err)
       }
     }
+
     fetchProductDetail()
   }, [selectedProductId])
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.barcode.includes(searchQuery)
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.barcode.includes(searchQuery)
   )
 
-  const handleSelectProduct = (id) => {
-    setSelectedProductId(id)
-  }
-
-  // Process data for the Recharts line graph
-  const getChartData = () => {
-    if (!productDetail || !productDetail.competitor_prices) return []
-
-    // Group competitor prices by date
-    const dateGroups = {}
-    
-    // Add guardian price as reference
-    // We group competitor prices by day (YYYY-MM-DD)
-    productDetail.competitor_prices.forEach(cp => {
-      const dateStr = new Date(cp.scraped_at).toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit' })
-      if (!dateGroups[dateStr]) {
-        dateGroups[dateStr] = { 
-          date: dateStr,
-          'Guardian': productDetail.guardian_price
-        }
-      }
-      dateGroups[dateStr][cp.competitor_name] = cp.net_price
-    })
-
-    // Sort by date key
-    return Object.values(dateGroups).sort((a, b) => a.date.localeCompare(b.date))
-  }
-
-  const chartData = getChartData()
-  const currentCPI = products.find(p => p.id === Number(selectedProductId))?.competitor_index || 100
+  const chartData = getChartData(productDetail)
+  const currentCPI = products.find((product) => product.id === Number(selectedProductId))?.competitor_index || 100
 
   return (
-    <div>
-      {/* Header */}
-      <div className="header">
+    <div className="page-stack">
+      <section className="header">
         <div className="header-title">
-          <h1>Phân tích Chi tiết SKU</h1>
-          <p>Phân tích chênh lệch giá Net Price và theo dõi lịch sử biến động giá của từng sản phẩm.</p>
+          <h1>SKU Insights</h1>
+          <p>
+            Drill down into a single barcode, compare effective competitor net price, and see whether the latest
+            scraped signal is safe, suspicious, or out of stock.
+          </p>
         </div>
-      </div>
+      </section>
 
-      <div className="agent-console-container" style={{ gridTemplateColumns: '1fr 3fr' }}>
-        {/* Left Side: Product Picker */}
-        <div className="section-card glass" style={{ height: 'calc(100vh - 180px)', display: 'flex', flexDirection: 'column', padding: '16px' }}>
+      <div className="agent-console-container" style={{ gridTemplateColumns: '1fr 2.4fr', height: 'auto' }}>
+        <section className="section-card glass sku-picker">
           <div style={{ position: 'relative', marginBottom: '16px' }}>
             <input
               type="text"
-              placeholder="Tìm tên hoặc barcode..."
+              placeholder="Search name or barcode..."
               className="form-control"
               style={{ paddingLeft: '40px' }}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => setSearchQuery(event.target.value)}
             />
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           </div>
 
-          <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {filteredProducts.map(p => (
-              <div
-                key={p.id}
-                className={`action-card-item ${selectedProductId === p.id ? 'active' : ''}`}
-                style={{ 
-                  cursor: 'pointer', 
-                  margin: 0, 
-                  background: selectedProductId === p.id ? 'rgba(240, 137, 19, 0.08)' : 'rgba(255, 255, 255, 0.01)',
-                  borderColor: selectedProductId === p.id ? 'var(--primary)' : 'var(--border-color)'
-                }}
-                onClick={() => handleSelectProduct(p.id)}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ fontWeight: '600', fontSize: '13px', color: selectedProductId === p.id ? 'white' : 'var(--text-main)' }}>
-                    {p.name}
+          <div className="scroll-stack">
+            {loading ? (
+              <div className="empty-note">Loading SKU list...</div>
+            ) : filteredProducts.length > 0 ? (
+              filteredProducts.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  className={`sku-list-item ${selectedProductId === product.id ? 'active' : ''}`}
+                  onClick={() => setSelectedProductId(product.id)}
+                >
+                  <div className="sku-list-head">
+                    <strong>{product.name}</strong>
+                    <span className={`badge ${product.competitor_index > 110 ? 'badge-danger' : product.competitor_index < 90 ? 'badge-success' : 'badge-info'}`}>
+                      CPI {product.competitor_index}%
+                    </span>
                   </div>
-                  <span className={`badge ${p.competitor_index > 110 ? 'badge-danger' : p.competitor_index < 90 ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '10px', padding: '2px 4px' }}>
-                    CPI {p.competitor_index}%
-                  </span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', fontFamily: 'var(--font-mono)' }}>
-                  {p.barcode}
-                </div>
-              </div>
-            ))}
-            {filteredProducts.length === 0 && (
-              <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '20px' }}>Không tìm thấy SKU.</div>
+                  <span>{product.barcode}</span>
+                </button>
+              ))
+            ) : (
+              <div className="empty-note">No SKU matched the search.</div>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Right Side: Product Details & Pricing Charts */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', height: 'calc(100vh - 180px)', overflowY: 'auto', paddingRight: '4px' }}>
+        <div className="page-stack">
           {productDetail ? (
             <>
-              {/* Product Info Cards */}
-              <div className="section-card glass" style={{ display: 'grid', gridTemplateColumns: '120px 1fr 1fr', gap: '24px', alignItems: 'center' }}>
-                <img src={productDetail.image_url} alt={productDetail.name} style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover', border: '1px solid var(--border-color)' }} />
-                
+              <section className="section-card glass product-summary-card">
+                <img src={productDetail.image_url} alt={productDetail.name} className="detail-img" />
+
                 <div>
-                  <h2 style={{ fontSize: '20px', fontWeight: '700', fontFamily: 'Outfit, sans-serif' }}>{productDetail.name}</h2>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '13px', color: 'var(--text-muted)' }}>
-                    <span>Barcode: <strong style={{ fontFamily: 'var(--font-mono)' }}>{productDetail.barcode}</strong></span>
-                    <span>•</span>
-                    <span>Phân mục: <strong>{productDetail.category}</strong></span>
+                  <h2>{productDetail.name}</h2>
+                  <div className="product-meta-row">
+                    <span>Barcode {productDetail.barcode}</span>
+                    <span>{productDetail.category}</span>
                   </div>
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '12px', lineHeight: 1.4 }}>{productDetail.description}</p>
+                  <p className="card-copy">{productDetail.description}</p>
                 </div>
 
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Giá Guardian</span>
-                    <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)' }}>{productDetail.guardian_price.toLocaleString()}đ</div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Giá Vốn (Cost)</span>
-                    <div style={{ fontSize: '16px', fontWeight: '600' }}>{(productDetail.cost_price || 0).toLocaleString()}đ</div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Biên Lợi Nhuận</span>
-                    <div style={{ fontSize: '16px', fontWeight: '600', color: '#10b981' }}>
-                      {productDetail.cost_price 
-                        ? `${Math.round(((productDetail.guardian_price - productDetail.cost_price)/productDetail.guardian_price)*100)}%`
-                        : 'N/A'}
-                    </div>
-                  </div>
-                  <div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Chỉ Số Giá CPI</span>
-                    <div style={{ fontSize: '16px', fontWeight: '700', color: currentCPI > 110 ? 'var(--danger)' : currentCPI < 90 ? 'var(--success)' : 'var(--info)' }}>
-                      {currentCPI}%
-                    </div>
-                  </div>
+                <div className="product-kv-grid">
+                  <Metric label="Guardian price" value={`${productDetail.guardian_price.toLocaleString()}đ`} tone="accent" />
+                  <Metric label="Cost price" value={`${(productDetail.cost_price || 0).toLocaleString()}đ`} />
+                  <Metric
+                    label="Margin"
+                    value={
+                      productDetail.cost_price
+                        ? `${Math.round(((productDetail.guardian_price - productDetail.cost_price) / productDetail.guardian_price) * 100)}%`
+                        : 'N/A'
+                    }
+                    tone="good"
+                  />
+                  <Metric
+                    label="CPI"
+                    value={`${currentCPI}%`}
+                    tone={currentCPI > 110 ? 'bad' : currentCPI < 90 ? 'good' : 'neutral'}
+                  />
                 </div>
-              </div>
+              </section>
 
-              {/* Price comparison list */}
-              <div className="section-card glass">
-                <div className="section-title" style={{ marginBottom: '16px' }}>Bảng Giá So Sánh Net Price Thực Tế</div>
+              <section className="section-card glass">
+                <div className="section-header">
+                  <div className="section-title">Competitor net-price table</div>
+                </div>
                 <div className="data-table-container">
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Đối Thủ</th>
-                        <th>Giá Gốc (Raw)</th>
-                        <th>Khuyến Mãi (Discount)</th>
-                        <th>Mã Vouchers</th>
-                        <th>Cơ Chế Phụ (Combo/Flash)</th>
-                        <th>Giá Thực Tế (Net Price)</th>
-                        <th>Chênh lệch</th>
-                        <th>Link</th>
+                        <th>Channel</th>
+                        <th>Raw</th>
+                        <th>Discount</th>
+                        <th>Voucher</th>
+                        <th>Promo</th>
+                        <th>Net price</th>
+                        <th>Gap vs Guardian</th>
+                        <th>Source</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {/* Guardian price line for comparison */}
-                      <tr style={{ background: 'rgba(240, 137, 19, 0.05)' }}>
-                        <td><strong>Guardian (Hiện tại)</strong></td>
+                      <tr className="guardian-row">
+                        <td><strong>Guardian</strong></td>
                         <td>{productDetail.guardian_price.toLocaleString()}đ</td>
                         <td>-</td>
                         <td>-</td>
                         <td>-</td>
-                        <td><strong style={{ color: 'var(--primary)' }}>{productDetail.guardian_price.toLocaleString()}đ</strong></td>
+                        <td><strong>{productDetail.guardian_price.toLocaleString()}đ</strong></td>
                         <td>-</td>
                         <td>-</td>
                       </tr>
 
-                      {/* Competitor prices */}
-                      {productDetail.competitor_prices && 
-                       productDetail.competitor_prices.slice(0, 5).map(cp => {
-                         const isOos = cp.stock_status === 'OUT_OF_STOCK' || cp.net_price === null;
-                         const isSuspicious = cp.is_suspicious;
-                         const diff = (isOos || isSuspicious) ? null : cp.net_price - productDetail.guardian_price;
-                         const diffPct = (isOos || isSuspicious) ? null : (diff / productDetail.guardian_price) * 100;
-                         return (
-                           <tr key={cp.id} style={{ opacity: isSuspicious ? 0.75 : 1 }}>
-                             <td>
-                               <span className={`competitor-dot ${cp.competitor_name.toLowerCase().replace(' ', '')}`} style={{ display: 'inline-flex', marginRight: '8px', cursor: 'default' }}>
-                                 {cp.competitor_name[0]}
-                               </span>
-                               <strong>{cp.competitor_name}</strong>
-                             </td>
-                             <td>{isOos ? '-' : (isSuspicious ? <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)' }}>{cp.raw_price.toLocaleString()}đ</span> : `${cp.raw_price.toLocaleString()}đ`)}</td>
-                             <td>{isOos ? '-' : (cp.discount > 0 ? `${cp.discount.toLocaleString()}đ` : '-')}</td>
-                             <td><span style={{ color: 'var(--primary)' }}>{isOos ? '-' : (cp.voucher_details || '-')}</span></td>
-                             <td>{isOos ? '-' : (cp.promo_mechanics || '-')}</td>
-                             <td>
-                               {isOos ? (
-                                 <span className="badge badge-danger" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                   HẾT HÀNG (OOS)
-                                 </span>
-                               ) : isSuspicious ? (
-                                 <span className="badge badge-warning" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                   BẤT THƯỜNG (ISOLATED)
-                                 </span>
-                               ) : (
-                                 <strong>{cp.net_price.toLocaleString()}đ</strong>
-                               )}
-                             </td>
-                             <td style={{ color: isOos ? '#10b981' : isSuspicious ? '#f59e0b' : (diff > 0 ? '#10b981' : diff < 0 ? '#ef4444' : 'var(--text-muted)'), fontWeight: '600' }}>
-                               {isOos ? 'N/A (Lợi thế kho)' : 
-                                isSuspicious ? 'Bị cô lập (Lọc nhiễu)' :
-                                (diff > 0 ? `+${diff.toLocaleString()}đ (+${Math.round(diffPct)}%)` : 
-                                 diff < 0 ? `${diff.toLocaleString()}đ (${Math.round(diffPct)}%)` : 
-                                 'Bằng giá')}
-                             </td>
-                             <td>
-                               <a href={cp.url} target="_blank" rel="noreferrer" className="alert-resolve-btn" style={{ display: 'inline-block' }}>
-                                 <ExternalLink size={14} />
-                               </a>
-                             </td>
-                           </tr>
-                         )
-                       })}
+                      {productDetail.competitor_prices?.slice(0, 8).map((priceRow) => {
+                        const isOos = priceRow.stock_status === 'OUT_OF_STOCK' || priceRow.net_price === null
+                        const isSuspicious = priceRow.is_suspicious
+                        const diff = isOos || isSuspicious ? null : priceRow.net_price - productDetail.guardian_price
+                        const diffPct = isOos || isSuspicious ? null : (diff / productDetail.guardian_price) * 100
+
+                        return (
+                          <tr key={priceRow.id}>
+                            <td><strong>{priceRow.competitor_name}</strong></td>
+                            <td>{priceRow.raw_price ? `${priceRow.raw_price.toLocaleString()}đ` : '-'}</td>
+                            <td>{priceRow.discount ? `${priceRow.discount.toLocaleString()}đ` : '-'}</td>
+                            <td>{priceRow.voucher_details || '-'}</td>
+                            <td>{priceRow.promo_mechanics || '-'}</td>
+                            <td>
+                              {isOos ? (
+                                <span className="badge badge-danger">Out of stock</span>
+                              ) : isSuspicious ? (
+                                <span className="badge badge-warning">Suspicious</span>
+                              ) : (
+                                <strong>{priceRow.net_price.toLocaleString()}đ</strong>
+                              )}
+                            </td>
+                            <td className={diff === null ? '' : diff < 0 ? 'price-bad' : 'price-good'}>
+                              {isOos
+                                ? 'Inventory advantage'
+                                : isSuspicious
+                                  ? 'Noise filtered'
+                                  : diff === 0
+                                    ? 'On parity'
+                                    : `${diff > 0 ? '+' : ''}${diff.toLocaleString()}đ (${Math.round(diffPct)}%)`}
+                            </td>
+                            <td>
+                              {priceRow.url ? (
+                                <a href={priceRow.url} target="_blank" rel="noreferrer" className="inline-link-button">
+                                  <ExternalLink size={13} />
+                                  Open
+                                </a>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </section>
 
-              {/* Price history chart */}
-              <div className="section-card glass">
-                <div className="section-title" style={{ marginBottom: '16px' }}>Biểu Đồ Lịch Sử Biến Động Giá Net Price (7 ngày qua)</div>
+              <section className="section-card glass">
+                <div className="section-header">
+                  <div className="section-title">7-day price history</div>
+                </div>
                 <div style={{ width: '100%', height: 300 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <LineChart data={chartData} margin={{ top: 5, right: 18, left: 8, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(47, 79, 79, 0.12)" />
                       <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={12} />
-                      <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${val/1000}k`} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'white' }}
-                        formatter={(val) => [`${val.toLocaleString()} VND`]}
+                      <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(255,255,255,0.98)',
+                          borderColor: 'rgba(15, 23, 42, 0.08)',
+                          color: 'var(--text-main)',
+                          borderRadius: '12px',
+                        }}
+                        formatter={(value) => [`${value.toLocaleString()} VND`]}
                       />
                       <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '13px' }} />
-                      <Line type="monotone" dataKey="Guardian" stroke="var(--primary)" strokeWidth={3} activeDot={{ r: 8 }} />
-                      <Line type="monotone" dataKey="Shopee" stroke="#f04b29" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="Lazada" stroke="#3b82f6" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="TikTok Shop" stroke="#00f2fe" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="GrabMart" stroke="#00b14f" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="Hasaki" stroke="#ec4899" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Guardian" stroke="var(--accent-strong)" strokeWidth={3} activeDot={{ r: 7 }} />
+                      <Line type="monotone" dataKey="Shopee" stroke="#ee6c4d" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Lazada" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="TikTok Shop" stroke="#111827" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="GrabMart" stroke="#0f9f72" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Hasaki" stroke="#d97706" strokeWidth={1.5} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
+              </section>
             </>
           ) : (
-            <div className="section-card glass" style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
-              Vui lòng chọn một sản phẩm ở cột danh sách bên trái để xem phân tích.
-            </div>
+            <section className="section-card glass">
+              <div className="empty-note">Choose a SKU from the left column to inspect pricing detail.</div>
+            </section>
           )}
         </div>
       </div>
     </div>
   )
+}
+
+function Metric({ label, value, tone = 'neutral' }) {
+  return (
+    <div className={`product-kv product-kv-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function getChartData(productDetail) {
+  if (!productDetail?.competitor_prices) return []
+
+  const dateGroups = {}
+  productDetail.competitor_prices.forEach((row) => {
+    const dateStr = new Date(row.scraped_at).toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' })
+    if (!dateGroups[dateStr]) {
+      dateGroups[dateStr] = {
+        date: dateStr,
+        Guardian: productDetail.guardian_price,
+      }
+    }
+    dateGroups[dateStr][row.competitor_name] = row.net_price
+  })
+
+  return Object.values(dateGroups).sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export default ProductInsights

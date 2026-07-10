@@ -9,11 +9,12 @@ from sqlalchemy.orm import Session
 from app import schemas
 from app.db import models
 from app.db.session import get_db
-from app.services.agent_engine import build_alert_decision_context, run_agentic_optimization_loop
+from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_client
+from app.services.agent_engine import build_alert_decision_context
+from app.services.agent_runtime import create_agent_task, get_agent_runtime_status, is_agent_running, run_agent_task
+from app.services.daily_scheduler import get_scheduler_status
 
 router = APIRouter()
-
-is_agent_running = False
 
 
 class AgentRunRequest(BaseModel):
@@ -26,41 +27,28 @@ def trigger_agent_run(
     payload: AgentRunRequest = AgentRunRequest(),
     db: Session = Depends(get_db),
 ):
-    global is_agent_running
-    if is_agent_running:
+    if is_agent_running():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="AI Agent loop is already running in background.",
         )
 
-    task = models.AgentTask(
-        objective="Autonomously scan competitor channels, refresh pricing intelligence, protect margins, and optimize competitor index.",
-        status="Pending",
-        logs="[Agent Queued] Waiting to start autonomous watchtower run...",
-    )
-    db.add(task)
-    db.commit()
-    db.refresh(task)
+    client = get_langfuse_client()
+    if client:
+        with client.start_as_current_observation(
+            as_type="span",
+            name="agent-run-request",
+            input={"refresh_market_data": payload.refresh_market_data},
+        ) as span:
+            queued_task = create_agent_task(source="manual")
+            span.update(output={"task_id": queued_task.id, "source": "manual"})
+            flush_langfuse()
+    else:
+        queued_task = create_agent_task(source="manual")
 
-    from app.db.session import SessionLocal
+    task = db.query(models.AgentTask).filter(models.AgentTask.id == queued_task.id).first()
 
-    def run_agent_thread(task_id: int):
-        global is_agent_running
-        is_agent_running = True
-        thread_db = SessionLocal()
-        try:
-            run_agentic_optimization_loop(
-                thread_db,
-                task_id=task_id,
-                refresh_market_data=payload.refresh_market_data,
-            )
-        except Exception as exc:
-            print(f"Error in background agent task: {exc}")
-        finally:
-            is_agent_running = False
-            thread_db.close()
-
-    background_tasks.add_task(run_agent_thread, task.id)
+    background_tasks.add_task(run_agent_task, task.id, payload.refresh_market_data, "manual")
     return task
 
 
@@ -178,24 +166,44 @@ def approve_agent_action(action_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        action.status = "Approved"
+        client = get_langfuse_client()
 
-        if action.action_type == "AUTO_PRICE_MATCH":
-            payload = json.loads(action.data)
-            new_price = payload.get("new_price")
-            product = db.query(models.Product).filter(models.Product.id == action.product_id).first()
-            if product and new_price:
-                product.guardian_price = float(new_price)
+        def _approve_action():
+            action.status = "Approved"
 
-            unresolved_alerts = db.query(models.Alert).filter(
-                models.Alert.product_id == action.product_id,
-                models.Alert.is_resolved == False,
-            ).all()
-            for alert in unresolved_alerts:
-                alert.is_resolved = True
+            if action.action_type == "AUTO_PRICE_MATCH":
+                payload = json.loads(action.data)
+                new_price = payload.get("new_price")
+                product = db.query(models.Product).filter(models.Product.id == action.product_id).first()
+                if product and new_price:
+                    product.guardian_price = float(new_price)
 
-        db.commit()
-        return {"status": "success", "message": "Action approved and executed successfully."}
+                unresolved_alerts = db.query(models.Alert).filter(
+                    models.Alert.product_id == action.product_id,
+                    models.Alert.is_resolved == False,
+                ).all()
+                for alert in unresolved_alerts:
+                    alert.is_resolved = True
+
+            db.commit()
+            return {"status": "success", "message": "Action approved and executed successfully."}
+
+        if client:
+            with client.start_as_current_observation(
+                as_type="span",
+                name="agent-action-approve",
+                input={
+                    "action_id": action.id,
+                    "action_type": action.action_type,
+                    "product_id": action.product_id,
+                },
+            ) as span:
+                result = _approve_action()
+                span.update(output=result)
+                flush_langfuse()
+                return result
+
+        return _approve_action()
     except Exception as exc:
         db.rollback()
         raise HTTPException(
@@ -219,16 +227,36 @@ def reject_agent_action(action_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        action.status = "Rejected"
-        unresolved_alerts = db.query(models.Alert).filter(
-            models.Alert.product_id == action.product_id,
-            models.Alert.is_resolved == False,
-        ).all()
-        for alert in unresolved_alerts:
-            alert.is_resolved = True
+        client = get_langfuse_client()
 
-        db.commit()
-        return {"status": "success", "message": "Action rejected and alert dismissed."}
+        def _reject_action():
+            action.status = "Rejected"
+            unresolved_alerts = db.query(models.Alert).filter(
+                models.Alert.product_id == action.product_id,
+                models.Alert.is_resolved == False,
+            ).all()
+            for alert in unresolved_alerts:
+                alert.is_resolved = True
+
+            db.commit()
+            return {"status": "success", "message": "Action rejected and alert dismissed."}
+
+        if client:
+            with client.start_as_current_observation(
+                as_type="span",
+                name="agent-action-reject",
+                input={
+                    "action_id": action.id,
+                    "action_type": action.action_type,
+                    "product_id": action.product_id,
+                },
+            ) as span:
+                result = _reject_action()
+                span.update(output=result)
+                flush_langfuse()
+                return result
+
+        return _reject_action()
     except Exception as exc:
         db.rollback()
         raise HTTPException(
@@ -250,3 +278,11 @@ def save_config(config: schemas.AgentConfig):
 
     save_agent_config(config.model_dump())
     return {"status": "success", "message": "Configuration saved successfully."}
+
+
+@router.get("/runtime-status")
+def get_runtime_status():
+    return {
+        "agent": get_agent_runtime_status(),
+        "scheduler": get_scheduler_status(),
+    }

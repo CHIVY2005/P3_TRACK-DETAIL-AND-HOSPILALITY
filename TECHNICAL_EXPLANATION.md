@@ -1,271 +1,317 @@
 # TECHNICAL EXPLANATION
 
-Tai lieu nay tap trung vao workflow thuc te cua codebase hien tai, khong theo boilerplate cu.
+Tai lieu nay tap trung vao cau hoi "du lieu chay nhu the nao" va "tai sao he thong ra quyet dinh nhu vay".
 
-## 1. Workflow overview
+## 1. Truc quan workflow tong
 
-Du an co 4 luong chinh:
-
-1. Seed demo dataset
-2. Scrape / refresh du lieu gia doi thu
-3. Tinh CPI va tao alerts
-4. Chay AI agent va human approval
-
-## 2. Architecture workflow
-
-```mermaid
-flowchart TD
-    User[Category Manager]
-    FE[React Frontend]
-    API[FastAPI Backend]
-    DB[(SQLite guardian.db)]
-
-    subgraph DemoData
-        SKU[data/sku_master.csv]
-        COMP[data/competitor_mock.csv]
-        SAMPLE[dataset_shopee-scraper_*.json]
-    end
-
-    subgraph Services
-        Seed[demo_seed.py]
-        Scraper[scraper_engine.py]
-        CPI[cpi_calculator.py]
-        Agent[agent_engine.py]
-        Evidence[scraped_samples.py]
-    end
-
-    User --> FE
-    FE --> API
-    API --> DB
-
-    SKU --> Seed
-    COMP --> Seed
-    Seed --> DB
-
-    API --> Scraper
-    Scraper --> DB
-    DB --> CPI
-    CPI --> DB
-    DB --> Agent
-    Agent --> DB
-
-    SAMPLE --> Evidence
-    Evidence --> API
-    API --> FE
+```text
+Upload dataset
+  -> Product + optional CompetitorLink
+  -> link discovery neu thieu URL
+  -> scraper hybrid lay gia doi thu
+  -> CPI engine tinh index va tao alert
+  -> agent doc alert va tao action
+  -> human approve / reject
 ```
 
-## 3. Seed workflow
+## 2. Workflow 1: Dynamic ingestion
 
-Workflow nay dung khi muon reset demo nhanh truoc luc thuyet trinh.
+Nguon vao co the la:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant FE as Configuration page
-    participant API as products.py
-    participant Seed as demo_seed.py
-    participant DB as SQLite
-    participant CPI as cpi_calculator.py
+- `csv`
+- `json`
 
-    FE->>API: POST /api/v1/products/seed-demo
-    API->>Seed: seed_demo_dataset(db)
-    Seed->>DB: Delete Product / CompetitorPrice / Alert / Agent data
-    Seed->>DB: Insert products from sku_master.csv
-    Seed->>DB: Insert competitor prices from competitor_mock.csv
-    Seed->>CPI: calculate_all_cpi(db)
-    CPI->>DB: Create PricingIndex + Alerts
-    API-->>FE: status + counts
+Route:
+
+- `POST /api/v1/products/import-dataset`
+
+Backend flow:
+
+1. `products.py` doc file upload
+2. `data_ingestion.py` parse records
+3. field aliases duoc map ve schema chung
+4. `Product` duoc tao
+5. neu file co URL doi thu, `CompetitorLink` duoc tao ngay
+6. sau import, scraper MVP chay cho tung SKU
+
+Ly do ton tai workflow nay:
+
+- du lieu that tu ban to chuc co the thay doi format
+- khong muon moi lan co CSV moi lai phai sua `seed_db.py`
+
+## 3. Workflow 2: Link discovery
+
+Van de business:
+
+- nhieu luc chi co ten san pham, chua co link Shopee / Hasaki / Lazada
+
+Giai phap hien tai:
+
+1. `link_discovery.py` kiem tra `CompetitorLink`
+2. neu chua co, no tao search URL theo platform
+3. scraper dung search URL nay lam diem bat dau
+
+Day chua phai semantic matching production-grade, nhung no giai quyet duoc bai toan MVP:
+
+- co the bat dau crawl ngay
+- khong can doi user bo sung URL thu cong
+
+## 4. Workflow 3: Hybrid scraping
+
+File trung tam:
+
+- `backend/app/scraper/scraper_engine.py`
+
+He thong thu lan luot:
+
+### Shopee / Lazada
+
+- uu tien luong marketplace
+- co the map payload raw qua `platform_mappers.py`
+
+### Hasaki / TikTok Shop
+
+- uu tien `Playwright`
+
+### Pharmacity / GrabMart
+
+- uu tien `Crawl4AI`
+
+### Fallback
+
+Neu tat ca deu that bai:
+
+- dung `simulate_competitor_price()`
+
+Y nghia ky thuat:
+
+- demo khong bi dung do anti-bot, rate-limit, firewall, hay missing key
+- flow nghiep vu van chay duoc tu dau den cuoi
+
+## 5. Workflow 4: Price normalization
+
+Van de:
+
+- payload crawl tu moi kenh co shape khac nhau
+- co kenh co `price_before_discount`
+- co kenh co `price`
+- co kenh co `promotion_name`
+
+Giai phap:
+
+- `platform_mappers.py` quy tat ca ve mot schema noi bo:
+  - `raw_price`
+  - `net_price`
+  - `discount`
+  - `voucher_details`
+  - `promo_mechanics`
+  - `stock_status`
+  - `url`
+
+Day la dieu kien bat buoc de CPI engine va frontend co the doc du lieu mot cach on dinh.
+
+## 6. Workflow 5: CPI va alert engine
+
+File trung tam:
+
+- `backend/app/services/cpi_calculator.py`
+
+Cho tung product, engine:
+
+1. lay latest price cua moi competitor
+2. bo qua:
+   - `OUT_OF_STOCK`
+   - `net_price = None`
+   - `is_suspicious = True`
+3. tinh `average_competitor_price`
+4. tinh:
+
+```text
+CPI = guardian_price / average_competitor_price * 100
 ```
 
-## 4. Scrape workflow
+5. dua ra recommendation:
+   - `Lower Price`
+   - `Increase Price`
+   - `Maintain Price`
+6. tao alert theo threshold
 
-Workflow nay dung khi user bam "Scan channels".
+## 7. Workflow 6: Anomaly detection
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant FE as Overview
-    participant API as scraper.py
-    participant SE as scraper_engine.py
-    participant DB as SQLite
-    participant CPI as cpi_calculator.py
+Van de:
 
-    FE->>API: POST /api/v1/scraper/trigger
-    API->>SE: run_scraper_for_all_products()
-    loop Moi product
-        SE->>SE: scrape_via_apify / crawl4ai / playwright
-        alt No live source or scrape fail
-            SE->>SE: simulate_competitor_price()
-        end
-        SE->>SE: check_price_anomaly()
-        SE->>DB: Save CompetitorPrice
-        SE->>CPI: calculate_cpi_for_product()
-        CPI->>DB: Update PricingIndex
-        CPI->>DB: Generate alerts
-    end
-```
+- scrape that co the doc nham gia
+- listing doi thu co the co outlier
 
-## 5. CPI and alert workflow
+Giai phap:
 
-Day la logic de bien du lieu gia thanh decision signal.
+- `check_price_anomaly()` so record moi voi lich su 10 lan scrape gan nhat
+- neu lech qua 50% -> danh dau `is_suspicious = True`
 
-```mermaid
-flowchart LR
-    CP[Latest competitor prices]
-    Filter[Bo qua OOS / null / suspicious]
-    Avg[Average competitor net price]
-    CPIVal[Competitor Pricing Index]
-    Rec[Recommendation]
-    Alert[Generate alerts]
+Tac dung:
 
-    CP --> Filter
-    Filter --> Avg
-    Avg --> CPIVal
-    CPIVal --> Rec
-    CPIVal --> Alert
-```
+- dashboard va CPI engine khong tin mu quang vao du lieu raw moi nhat
 
-Chi tiet:
+## 8. Workflow 7: Agent reasoning
 
-- `CPI = guardian_price / average_competitor_price * 100`
-- Neu CPI cao hon threshold -> `Lower Price`
-- Neu CPI thap hon threshold -> `Increase Price`
-- Neu competitor undercut manh -> tao `High` hoac `Medium` alert
+Agent da duoc tach thanh nhieu lop.
 
-## 6. Agent workflow
+### 8.1 Market Observer
 
-Day la workflow quan trong nhat cho theme agentic AI.
+Nhiem vu:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant FE as AgentWorkspace
-    participant API as agent.py
-    participant DB as SQLite
-    participant Agent as agent_engine.py
-    participant Config as config.json
-    participant RAG as supplier_policies.txt / RAG
+- lay latest clean competitor price
+- bien alert thanh decision context cho `agent/briefing`
 
-    FE->>API: POST /api/v1/agent/run
-    API->>DB: Create AgentTask
-    API->>Agent: run_agentic_optimization_loop()
-    Agent->>DB: Load unresolved alerts
+Output cua no la object frontend doc truc tiep duoc:
 
-    loop Moi alert
-        Agent->>Agent: margin_analysis
-        Agent->>Config: Read min_margin + custom instruction
-        Agent->>Agent: determine_strategy
-        alt strategy = match
-            Agent->>DB: Create AUTO_PRICE_MATCH (Pending)
-        else strategy = negotiate
-            Agent->>RAG: Query supplier policy context
-            Agent->>DB: Create SUPPLIER_EMAIL_DRAFT (Executed)
-        end
-        Agent->>DB: Append logs to AgentTask
-    end
-
-    FE->>API: GET /api/v1/agent/tasks
-    FE->>API: GET /api/v1/agent/actions
-    API-->>FE: Logs + actions
-```
-
-## 7. Agent briefing workflow
-
-Frontend mission control khong ghep du lieu thu cong nua. No dung `GET /agent/briefing`.
-
-```mermaid
-flowchart LR
-    Alerts[Unresolved alerts]
-    Prices[Latest valid competitor prices]
-    Margin[Margin analysis]
-    Queue[Priority queue]
-    Summary[Briefing summary]
-    FE[Overview page]
-
-    Alerts --> Margin
-    Prices --> Margin
-    Margin --> Queue
-    Margin --> Summary
-    Queue --> FE
-    Summary --> FE
-```
-
-`build_alert_decision_context()` la ham trung tam o workflow nay.
-
-No tra ra:
-
-- product nao bi undercut
-- competitor nao lien quan
+- product nao co van de
+- doi thu nao dang re hon
 - gap gia bao nhieu
 - margin neu match
-- recommendation `match` hay `negotiate`
-- rationale de frontend hien thi
+- nen match hay negotiate
 
-## 8. Human approval workflow
+### 8.2 Margin Guardian
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant CM as Category Manager
-    participant FE as AgentWorkspace
-    participant API as agent.py
-    participant DB as SQLite
+Nhiem vu:
 
-    CM->>FE: Approve AUTO_PRICE_MATCH
-    FE->>API: POST /api/v1/agent/actions/{id}/approve
-    API->>DB: Mark action Approved
-    API->>DB: Update guardian_price on Product
-    API->>DB: Resolve unresolved alerts for same product
-    API-->>FE: success
+1. tinh current margin
+2. tinh margin if matched
+3. doc config `min_margin`
+4. ap dung rule-based decision summary co cau truc
+5. ghi lai ly do de trace va de operator doc
 
-    alt Reject action
-        CM->>FE: Reject
-        FE->>API: POST /api/v1/agent/actions/{id}/reject
-        API->>DB: Mark action Rejected
-        API->>DB: Resolve unresolved alerts
-        API-->>FE: success
-    end
-```
+Quyet dinh:
 
-## 9. Branch `branch_of_Duy` workflow
+- `match`
+- `negotiate`
 
-Du lieu tu branch nay hien duoc dung nhu scrape evidence, khong phai full ingestion pipeline.
+### 8.3 Supplier Negotiator
 
-```mermaid
-flowchart LR
-    JSON[dataset_shopee-scraper_*.json]
-    Service[scraped_samples.py]
-    Match[Lightweight catalog matching]
-    API[scraper/branch-samples]
-    UI[Overview]
+Neu `match` khong an toan:
 
-    JSON --> Service
-    Service --> Match
-    Match --> API
-    API --> UI
-```
+1. tra policy theo rule-based template
+2. tao email draft
+3. tao action `SUPPLIER_EMAIL_DRAFT`
+
+### 8.4 Orchestrator
+
+Nhiem vu:
+
+1. tao `AgentTask`
+2. tuy chon refresh market data
+3. loop unresolved alerts
+4. goi Margin Guardian
+5. goi Supplier Negotiator neu can
+6. persist actions va logs
+
+## 9. Workflow 8: Human approval
+
+Action quan trong nhat la `AUTO_PRICE_MATCH`.
+
+Luot approve:
+
+1. frontend goi `POST /agent/actions/{id}/approve`
+2. backend mark action `Approved`
+3. update `Product.guardian_price`
+4. resolve cac alert lien quan
+
+Luot reject:
+
+1. frontend goi `POST /agent/actions/{id}/reject`
+2. backend mark `Rejected`
+3. resolve alert lien quan
+
+Y nghia:
+
+- AI co quyen de xuat
+- con nguoi giu quyen thi hanh
+
+## 10. Workflow 9: Dashboard read model
+
+Frontend overview khong tu ghep du lieu bang tay tu nhieu endpoint nho nua.
+
+Endpoint:
+
+- `GET /api/v1/agent/briefing`
+
+API nay gom:
+
+- summary
+- priority queue
+- channel summary
+- latest task
+- pending action count
+
+No bien backend thanh mot `read model` phuc vu rieng cho dashboard.
+
+## 11. Workflow 10: Daily autonomous cycle
+
+Theo brief `hybrid scheduler`, he thong hien tai da co luong chay ngam dinh ky.
+
+Current behavior:
+
+- scheduler start cung FastAPI app
+- interval mac dinh la `86400` giay
+- moi tick se:
+  1. refresh market data
+  2. chay agent orchestration
+  3. tao action moi neu co alert hop le
+
+Co che an toan:
+
+- neu agent dang chay thu cong, scheduler se bo qua tick do
+- runtime status co the doc qua `GET /api/v1/agent/runtime-status`
+
+## 12. Workflow 11: Branch evidence
+
+File:
+
+- `dataset_shopee-scraper_*.json`
+
+Service:
+
+- `scraped_samples.py`
 
 Muc dich:
 
-- show bang chung scrape sample that
-- map sample listing voi catalog hien tai neu co the
-- tang do thuyet phuc cho pitch
+- show bang chung branch crawl co data that
+- match nhe listing voi catalog hien tai
+- dua evidence vao man Mission Control
 
-## 10. Workflow de demo tren san khau
+Day la lop adapter cho pitch, khong phai matching engine production.
 
-Thu tu nen dung:
+## 13. Vi sao kien truc hien tai hop ly cho hackathon
 
-1. Seed demo dataset
-2. Mo Overview
-3. Giai thich KPI, priority queue, branch sample evidence
-4. Mo ProductInsights de show raw pricing detail
-5. Chay agent trong AgentWorkspace
-6. Approve 1 action
-7. Quay lai Overview de cho thay state da thay doi
+No can bang duoc 3 dieu:
 
-## 11. Ghi chu ky thuat
+1. `Demoability`
+   - khong phu thuoc hoan toan vao scrape that
+   - co seed, fallback, approval flow
 
-- Agent hien tai co the chay rule-based fallback neu khong co OpenAI key
-- Scraper hien tai co the fallback sang simulated pricing
-- Dashboard da duoc toi uu cho demo mission-control
-- Frontend build trong moi truong nay van bi vuong issue Vite/esbuild voi protected parent directories
+2. `Extensibility`
+   - ingestion, discovery, scrape, agent duoc tach module
+   - co the thay tung lop ma khong pha toan bo flow
+
+3. `Explainability`
+   - dashboard doc duoc decision context
+   - agent co logs
+   - Langfuse co `decision_summary`
+   - action co trang thai ro rang
+
+## 14. Gioi han ky thuat hien tai
+
+- search-driven link discovery moi la MVP
+- chua co worker queue
+- chua co auth
+- frontend build trong sandbox nay van vuong Vite/esbuild do issue parent-directory permissions
+- scheduler hien tai la in-process thread, hop cho MVP nhung chua hop cho deployment nhieu instance
+
+## 15. Huong nang cap tiep
+
+Neu day tiep sau hackathon, uu tien nen la:
+
+1. thay search URL discovery bang matching service that
+2. tach scraper va agent ra queue worker
+3. dua Postgres + pgvector vao mode chinh
+4. them auth, audit log, va deployment

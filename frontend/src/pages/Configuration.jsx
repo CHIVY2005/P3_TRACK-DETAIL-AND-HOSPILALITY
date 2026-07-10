@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
+import { Database, RefreshCw, Save, SlidersHorizontal, UploadCloud } from 'lucide-react'
 import { API_BASE_URL } from '../App.jsx'
-import { Save, RefreshCw, Sliders, Play, AlertCircle } from 'lucide-react'
 
 function Configuration() {
   const [underpriceThreshold, setUnderpriceThreshold] = useState(10)
@@ -10,10 +10,9 @@ function Configuration() {
   const [customInstruction, setCustomInstruction] = useState('')
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
-  const [csvFile, setCsvFile] = useState(null)
+  const [datasetFile, setDatasetFile] = useState(null)
   const [uploading, setUploading] = useState(false)
 
-  // Fetch config on mount
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -26,60 +25,58 @@ function Configuration() {
         console.error('Error loading config', err)
       }
     }
+
     fetchConfig()
   }, [])
 
-  const handleSaveConfig = async (e) => {
-    e.preventDefault()
+  const handleSaveConfig = async (event) => {
+    event.preventDefault()
     try {
       setLoading(true)
       await axios.post(`${API_BASE_URL}/agent/config`, {
         underprice_threshold: underpriceThreshold / 100.0,
         overprice_threshold: overpriceThreshold / 100.0,
         min_margin: minMargin / 100.0,
-        custom_instruction: customInstruction
+        custom_instruction: customInstruction,
       })
-      alert('Đã lưu cấu hình tham số AI Agent & Chỉ số Cảnh báo thành công persistent!')
+      alert('Agent configuration saved successfully.')
     } catch (err) {
-      alert('Không thể lưu cấu hình.')
+      alert('Unable to save the configuration.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleFileChange = (e) => {
-    setCsvFile(e.target.files[0])
-  }
-
-  const handleUploadCsv = async (e) => {
-    e.preventDefault()
-    if (!csvFile) {
-      alert('Vui lòng chọn tệp tin .csv trước!')
+  const handleUploadDataset = async (event) => {
+    event.preventDefault()
+    if (!datasetFile) {
+      alert('Select a CSV or JSON file first.')
       return
     }
 
     const formData = new FormData()
-    formData.append('file', csvFile)
+    formData.append('file', datasetFile)
 
     try {
       setUploading(true)
-      const res = await axios.post(`${API_BASE_URL}/products/import-csv`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      const res = await axios.post(`${API_BASE_URL}/products/import-dataset`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       alert(res.data.message)
-      setCsvFile(null)
-      document.getElementById('csv-file-input').value = ''
+      setDatasetFile(null)
+      const input = document.getElementById('dataset-file-input')
+      if (input) input.value = ''
     } catch (err) {
-      alert(err.response?.data?.detail || 'Lỗi khi tải lên file CSV.')
+      alert(err.response?.data?.detail || 'Dataset upload failed.')
     } finally {
       setUploading(false)
     }
   }
 
   const handleResetDatabase = async () => {
-    const confirmReset = window.confirm('Reload the hackathon demo dataset? This replaces current products, competitor prices, alerts, and agent actions.')
+    const confirmReset = window.confirm(
+      'Reload the demo dataset? This replaces products, competitor prices, alerts, tasks, actions, and imported competitor links.'
+    )
     if (!confirmReset) return
 
     try {
@@ -94,162 +91,139 @@ function Configuration() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="header">
+    <div className="page-stack">
+      <section className="header">
         <div className="header-title">
-          <h1>Cấu hình Hệ thống AI Agent</h1>
-          <p>Điều chỉnh các quy định hoạt động của AI Agent, ngưỡng nhạy cảm giá và quản lý tài nguyên cơ sở dữ liệu.</p>
+          <h1>Operations Configuration</h1>
+          <p>
+            This screen now supports dynamic CSV and JSON ingestion, preserves the demo reset path, and lets us tune
+            the thresholds that drive the Margin Guardian decision flow.
+          </p>
         </div>
-      </div>
+      </section>
 
       <div className="config-grid">
-        {/* Threshold Rules */}
-        <div className="section-card glass" style={{ padding: '28px' }}>
-          <div className="section-header" style={{ marginBottom: '24px' }}>
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sliders size={18} style={{ color: 'var(--primary)' }} />
-              Ngưỡng Cảnh Báo Chỉ Số Giá (CPI)
+        <section className="section-card glass">
+          <div className="section-header">
+            <div className="section-title section-title-inline">
+              <SlidersHorizontal size={18} />
+              <span>Decision thresholds</span>
             </div>
           </div>
 
           <form onSubmit={handleSaveConfig}>
             <div className="form-group">
-              <label>Ngưỡng Đánh Giá "Bị Ép Giá" (Overpriced Threshold)</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label>Overpriced threshold</label>
+              <div className="input-inline">
                 <input
                   type="number"
                   className="form-control"
                   value={overpriceThreshold}
-                  onChange={(e) => setOverpriceThreshold(Number(e.target.value))}
+                  onChange={(event) => setOverpriceThreshold(Number(event.target.value))}
                   min="1"
                   max="50"
                 />
                 <span>%</span>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                Cảnh báo khi giá của Guardian cao hơn đối thủ từ {overpriceThreshold}%.
-              </span>
+              <small>Raise a pricing alert when Guardian is higher than market by this margin.</small>
             </div>
 
             <div className="form-group">
-              <label>Ngưỡng Đánh Giá "Cơ Hội Tăng Giá" (Underpriced Threshold)</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label>Underpriced threshold</label>
+              <div className="input-inline">
                 <input
                   type="number"
                   className="form-control"
                   value={underpriceThreshold}
-                  onChange={(e) => setUnderpriceThreshold(Number(e.target.value))}
+                  onChange={(event) => setUnderpriceThreshold(Number(event.target.value))}
                   min="1"
                   max="50"
                 />
                 <span>%</span>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                Cảnh báo cơ hội tăng giá khi giá của Guardian thấp hơn đối thủ từ {underpriceThreshold}%.
-              </span>
+              <small>Flag margin leakage when Guardian is meaningfully below competitor pricing.</small>
             </div>
 
             <div className="form-group">
-              <label>Biên Lợi Nhuận An Toàn Tối Thiểu (Minimum Margin Limit)</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label>Minimum safe margin</label>
+              <div className="input-inline">
                 <input
                   type="number"
                   className="form-control"
                   value={minMargin}
-                  onChange={(e) => setMinMargin(Number(e.target.value))}
+                  onChange={(event) => setMinMargin(Number(event.target.value))}
                   min="5"
                   max="50"
                 />
                 <span>%</span>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                Nếu việc giảm giá khớp đối thủ làm biên lợi nhuận rớt dưới {minMargin}%, AI Agent sẽ dừng việc match giá tự động và chuyển sang soạn thư đề xuất đàm phán với Supplier.
-              </span>
+              <small>If matching would push margin below this point, the agent drafts supplier outreach instead.</small>
             </div>
 
-            <div className="form-group" style={{ marginTop: '16px' }}>
-              <label>Chỉ thị Tùy chỉnh cho AI Agent (LLM Custom Instruction)</label>
+            <div className="form-group">
+              <label>Custom instruction for the agent</label>
               <textarea
-                className="form-control"
-                style={{ height: '80px', padding: '10px', resize: 'vertical', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'white', borderRadius: '6px', width: '100%', outline: 'none' }}
-                placeholder="Ví dụ: Ưu tiên bảo vệ biên lợi nhuận cao ở các dòng Skincare và giảm giá cạnh tranh mạnh ở Shopee."
+                className="form-control form-textarea"
+                placeholder="Example: protect skincare margin first, but stay aggressive on Shopee."
                 value={customInstruction}
-                onChange={(e) => setCustomInstruction(e.target.value)}
+                onChange={(event) => setCustomInstruction(event.target.value)}
               />
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                Chỉ thị này sẽ được gửi trực tiếp đến OpenAI GPT-4o để tùy biến luồng tư duy đưa ra quyết định của AI Agent.
-              </span>
             </div>
 
-            <button type="submit" className="btn btn-primary" style={{ marginTop: '12px' }}>
+            <button type="submit" className="btn btn-accent">
               <Save size={16} />
-              {loading ? 'Đang lưu...' : 'Lưu cấu hình quy tắc'}
+              {loading ? 'Saving...' : 'Save rules'}
             </button>
           </form>
-        </div>
+        </section>
 
-        {/* Database Management & Dynamic Importer */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* CSV Importer Card */}
-          <div className="section-card glass" style={{ padding: '28px' }}>
-            <div className="section-header" style={{ marginBottom: '16px' }}>
-              <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)' }}>
-                <RefreshCw size={18} />
-                Nạp Danh Sách SKU Động (Dynamic CSV Importer)
+        <div className="config-stack">
+          <section className="section-card glass">
+            <div className="section-header">
+              <div className="section-title section-title-inline">
+                <UploadCloud size={18} />
+                <span>Dynamic dataset import</span>
               </div>
             </div>
-            
-            <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Nạp danh sách sản phẩm thật của Ban tổ chức vào hệ thống. Tệp tin cần chứa các cột: 
-              <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--bg-input)', padding: '2px 4px', borderRadius: '4px', marginLeft: '4px' }}>
-                barcode, name, category, guardian_price, cost_price
-              </code>
+
+            <p className="card-copy">
+              Upload `csv` or `json`. The importer auto-maps common product fields and also registers optional
+              competitor URLs such as `shopee_url`, `hasaki_url`, or `lazada_url` when they are present.
             </p>
 
-            <form onSubmit={handleUploadCsv} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <form onSubmit={handleUploadDataset} className="upload-form">
               <input
-                id="csv-file-input"
+                id="dataset-file-input"
                 type="file"
-                accept=".csv"
-                onChange={handleFileChange}
+                accept=".csv,.json"
+                onChange={(event) => setDatasetFile(event.target.files?.[0] || null)}
                 className="form-control"
-                style={{ padding: '8px 12px' }}
               />
-              <button 
-                type="submit" 
-                className="btn btn-accent" 
-                style={{ alignSelf: 'flex-start' }}
-                disabled={uploading}
-              >
-                {uploading ? 'Đang tải lên...' : 'Tải lên & Khởi tạo CSDL'}
+              <button type="submit" className="btn btn-secondary" disabled={uploading}>
+                <UploadCloud size={16} />
+                {uploading ? 'Importing...' : 'Import dataset'}
               </button>
             </form>
-          </div>
+          </section>
 
-          {/* Reset System Card */}
-          <div className="section-card glass" style={{ padding: '28px' }}>
-            <div className="section-header" style={{ marginBottom: '16px' }}>
-              <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
-                <AlertCircle size={18} />
-                Tái lập Hệ thống
+          <section className="section-card glass">
+            <div className="section-header">
+              <div className="section-title section-title-inline">
+                <Database size={18} />
+                <span>Demo recovery</span>
               </div>
             </div>
 
-            <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Xóa sạch cơ sở dữ liệu hiện tại và tải lại 200 SKU giả lập mẫu ban đầu phục vụ cho demo thuyết trình.
+            <p className="card-copy">
+              Reset back to the demo catalog, competitor history, and alert workflow. This is useful right before a
+              presentation or after a heavy import experiment.
             </p>
 
-            <button 
-              className="btn btn-secondary" 
-              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
-              onClick={handleResetDatabase}
-              disabled={seeding}
-            >
+            <button className="btn btn-secondary" onClick={handleResetDatabase} disabled={seeding}>
               <RefreshCw size={16} className={seeding ? 'spin' : ''} />
-              {seeding ? 'Đang Reset CSDL...' : 'Reset & Re-seed CSDL mẫu'}
+              {seeding ? 'Reloading demo...' : 'Reload demo dataset'}
             </button>
-          </div>
+          </section>
         </div>
       </div>
     </div>

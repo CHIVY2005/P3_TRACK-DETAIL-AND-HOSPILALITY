@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
-import { API_BASE_URL } from '../App.jsx'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   Activity,
-  AlertTriangle,
+  ArrowRight,
   BrainCircuit,
   Cpu,
-  RefreshCw,
   Radar,
-  Send,
+  RefreshCw,
   ShieldAlert,
   Sparkles,
   Target,
   TrendingUp,
+  Workflow,
 } from 'lucide-react'
+import { API_BASE_URL } from '../App.jsx'
 
 function Overview() {
   const [stats, setStats] = useState(null)
@@ -29,13 +29,7 @@ function Overview() {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [
-        statsRes,
-        alertsRes,
-        briefingRes,
-        actionsRes,
-        branchSamplesRes,
-      ] = await Promise.all([
+      const [statsRes, alertsRes, briefingRes, actionsRes, branchSamplesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/pricing/overview`),
         axios.get(`${API_BASE_URL}/alerts`),
         axios.get(`${API_BASE_URL}/agent/briefing?limit=5`),
@@ -75,7 +69,7 @@ function Overview() {
     try {
       setTriggeringAgent(true)
       await axios.post(`${API_BASE_URL}/agent/run`, {
-        refresh_market_data: false
+        refresh_market_data: false,
       })
       setTimeout(fetchData, 1200)
     } catch (err) {
@@ -95,7 +89,7 @@ function Overview() {
   }
 
   if (loading && !stats && !briefing) {
-    return <div style={{ color: 'var(--text-muted)' }}>Loading mission control...</div>
+    return <div className="loading-state">Loading mission control...</div>
   }
 
   const competitorChartData = stats?.competitor_avg_prices
@@ -105,93 +99,87 @@ function Overview() {
   const summary = briefing?.summary
   const queue = briefing?.priority_queue || []
   const latestTaskLog = briefing?.latest_task?.logs
-    ? briefing.latest_task.logs.split('\n').filter(Boolean).slice(-4)
-    : ['No autonomous run yet. Seed demo data, then let the agent refresh market data and act.']
+    ? briefing.latest_task.logs.split('\n').filter(Boolean).slice(-5)
+    : ['No autonomous run yet. Import data, trigger scrape, then let the agent decide.']
 
   return (
-    <div>
-      <div className="header">
-        <div className="header-title">
-          <h1>Agentic Pricing Mission Control</h1>
-          <p>Single source of truth for Top SKU pricing, promotion gaps, and approval-ready AI actions.</p>
+    <div className="page-stack">
+      <section className="hero-band">
+        <div className="hero-copy">
+          <div className="eyebrow">
+            <Workflow size={14} />
+            <span>Dynamic ingestion • link discovery • hybrid crawl • human approval</span>
+          </div>
+          <h1>Agentic pricing cockpit for Guardian&apos;s MVP merge.</h1>
+          <p>
+            This branch now combines the dashboard workflow, the scrape-oriented branch direction, and a cleaner
+            agent architecture so the story from internal catalog to competitor action is visible in one screen.
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+
+        <div className="hero-actions">
           <button className="btn btn-secondary" onClick={handleTriggerScrape} disabled={triggeringScrape}>
             <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-            {triggeringScrape ? 'Scanning...' : 'Scan channels'}
+            {triggeringScrape ? 'Scanning channels...' : 'Refresh channels'}
           </button>
           <button className="btn btn-accent" onClick={handleRunAgent} disabled={triggeringAgent}>
             <Cpu size={16} className={triggeringAgent ? 'pulse' : ''} />
-            {triggeringAgent ? 'Agent running...' : 'Run autonomous agent'}
+            {triggeringAgent ? 'Agent running...' : 'Run pricing agent'}
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="mission-band glass">
-        <div className="mission-copy">
-          <span className="mission-eyebrow">Perceive  Reason  Act</span>
-          <h2>The hackathon story should be visible in one glance.</h2>
-          <p>
-            The agent refreshes competitor channels, reasons over CPI and margin protection, then proposes
-            the safest next move for a Category Manager to approve.
-          </p>
-        </div>
-        <div className="mission-stats">
-          <div className="mission-stat">
-            <span>Tracked SKUs</span>
-            <strong>{summary?.monitored_sku ?? stats?.total_sku ?? 0}</strong>
-          </div>
-          <div className="mission-stat">
-            <span>Active alerts</span>
-            <strong>{summary?.active_alerts ?? alerts.length}</strong>
-          </div>
-          <div className="mission-stat">
-            <span>Pending approvals</span>
-            <strong>{summary?.pending_actions ?? 0}</strong>
-          </div>
-          <div className="mission-stat">
-            <span>Last scrape</span>
-            <strong>{summary?.last_scrape_at ? formatDateTime(summary.last_scrape_at) : 'N/A'}</strong>
-          </div>
-        </div>
-      </div>
-
-      <div className="kpi-grid">
+      <section className="hero-metrics">
+        <MetricCard
+          title="Tracked SKU"
+          value={summary?.monitored_sku ?? stats?.total_sku ?? 0}
+          detail="Catalog rows ready for sync and CPI logic"
+          icon={<Target size={16} />}
+        />
         <MetricCard
           title="Average CPI"
           value={`${summary?.average_cpi ?? stats?.average_cpi ?? 100}%`}
-          detail="Guardian price index vs competitor average"
-          icon={<Target className="kpi-icon" size={16} />}
+          detail="Guardian index versus competitor market average"
+          icon={<TrendingUp size={16} />}
         />
         <MetricCard
           title="High-risk alerts"
           value={summary?.high_severity_alerts ?? stats?.high_severity_alerts ?? 0}
-          detail="Urgent undercutting or margin pressure"
-          icon={<ShieldAlert className="kpi-icon" size={16} />}
+          detail="Undercut cases that need judgment fast"
+          icon={<ShieldAlert size={16} />}
         />
         <MetricCard
-          title="Raise-price opportunities"
-          value={stats?.underpriced_sku ?? 0}
-          detail="Guardian priced meaningfully below market"
-          icon={<TrendingUp className="kpi-icon" size={16} />}
-        />
-        <MetricCard
-          title="Channels covered"
+          title="Covered channels"
           value={summary?.channels_covered ?? 0}
-          detail="Sources feeding the pricing command center"
-          icon={<Radar className="kpi-icon" size={16} />}
+          detail="Live and fallback sources in current MVP"
+          icon={<Radar size={16} />}
         />
-      </div>
+      </section>
 
-      <div className="dashboard-grid" style={{ gridTemplateColumns: '1.3fr 1fr' }}>
-        <div className="section-card glass">
+      <section className="pipeline-strip">
+        {[
+          ['1', 'Dynamic ingestion', 'CSV or JSON maps into the product catalog and optional competitor links.'],
+          ['2', 'Link discovery', 'Missing URLs are generated into search-driven competitor link records.'],
+          ['3', 'Hybrid scrape', 'Apify, Playwright, Crawl4AI, or fixture fallback keep the flow alive.'],
+          ['4', 'Agent action', 'Margin Guardian and Supplier Negotiator propose the safest next move.'],
+        ].map(([step, title, copy]) => (
+          <div key={step} className="pipeline-step">
+            <span>{step}</span>
+            <strong>{title}</strong>
+            <p>{copy}</p>
+          </div>
+        ))}
+      </section>
+
+      <div className="dashboard-grid dashboard-grid-wide">
+        <section className="section-card glass">
           <div className="section-header">
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <BrainCircuit size={18} style={{ color: '#8b5cf6' }} />
-              Live reasoning trace
+            <div className="section-title section-title-inline">
+              <BrainCircuit size={18} />
+              <span>Live reasoning trace</span>
             </div>
             <span className="badge badge-info">
-              <Activity size={12} style={{ marginRight: '6px' }} />
+              <Activity size={12} />
               {briefing?.latest_task?.status || 'Idle'}
             </span>
           </div>
@@ -202,13 +190,13 @@ function Overview() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="section-card glass">
+        <section className="section-card glass">
           <div className="section-header">
-            <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={18} style={{ color: 'var(--primary)' }} />
-              Priority queue
+            <div className="section-title section-title-inline">
+              <Sparkles size={18} />
+              <span>Priority queue</span>
             </div>
           </div>
           <div className="priority-list">
@@ -232,42 +220,48 @@ function Overview() {
                 </div>
               ))
             ) : (
-              <div style={{ color: 'var(--text-muted)' }}>No active decision queue yet.</div>
+              <div className="empty-note">No active decision queue yet.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
 
-      <div className="dashboard-grid" style={{ gridTemplateColumns: '1.2fr 0.8fr' }}>
-        <div className="section-card glass">
+      <div className="dashboard-grid dashboard-grid-wide">
+        <section className="section-card glass">
           <div className="section-header">
             <div className="section-title">Channel pricing map</div>
           </div>
           <div style={{ width: '100%', height: 320 }}>
             {competitorChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={competitorChartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <BarChart data={competitorChartData} margin={{ top: 12, right: 12, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(47, 79, 79, 0.12)" />
                   <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} />
                   <YAxis stroke="var(--text-muted)" fontSize={11} tickFormatter={(val) => `${Math.round(val / 1000)}k`} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'white' }}
+                    cursor={{ fill: 'rgba(15, 118, 110, 0.08)' }}
+                    contentStyle={{
+                      backgroundColor: 'rgba(255,255,255,0.98)',
+                      borderColor: 'rgba(15, 23, 42, 0.08)',
+                      color: 'var(--text-main)',
+                      borderRadius: '12px',
+                    }}
                     formatter={(value) => [`${Number(value).toLocaleString()} VND`, 'Average net price']}
                   />
-                  <Bar dataKey="price" radius={[8, 8, 0, 0]}>
+                  <Bar dataKey="price" radius={[10, 10, 0, 0]}>
                     {competitorChartData.map((entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={
                           entry.name === 'GrabMart'
-                            ? '#00b14f'
+                            ? '#0f9f72'
                             : entry.name === 'Shopee'
-                              ? '#f04b29'
+                              ? '#ee6c4d'
                               : entry.name === 'Lazada'
-                                ? '#3b82f6'
+                                ? '#2563eb'
                                 : entry.name === 'TikTok Shop'
                                   ? '#111827'
-                                  : '#8b5cf6'
+                                  : '#0f766e'
                         }
                       />
                     ))}
@@ -275,16 +269,14 @@ function Overview() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: '120px' }}>
-                No channel data yet.
-              </div>
+              <div className="empty-chart">No channel data yet.</div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="section-card glass">
+        <section className="section-card glass">
           <div className="section-header">
-            <div className="section-title">Branch data evidence</div>
+            <div className="section-title">Scrape branch evidence</div>
           </div>
           <div className="sample-list">
             {branchSamples.length > 0 ? (
@@ -297,33 +289,30 @@ function Overview() {
                   <strong>{sample.title}</strong>
                   <p>
                     {sample.current_price ? `${Number(sample.current_price).toLocaleString()} VND` : 'Price unavailable'}
-                    {sample.discount_pct ? `  •  ${sample.discount_pct}% off` : ''}
+                    {sample.discount_pct ? ` • ${sample.discount_pct}% off` : ''}
                   </p>
                   <div className="sample-meta">
                     <span>{sample.record_count} record(s)</span>
                     <span>{sample.rating ? `${sample.rating} rating` : 'No rating'}</span>
                   </div>
-                  {sample.match && (
-                    <div className="sample-match">
-                      Matched to catalog: {sample.match.product_name}
-                    </div>
-                  )}
-                  {sample.url && (
-                    <a href={sample.url} target="_blank" rel="noreferrer" className="action-card-details-btn">
+                  {sample.match ? <div className="sample-match">Matched catalog SKU: {sample.match.product_name}</div> : null}
+                  {sample.url ? (
+                    <a href={sample.url} target="_blank" rel="noreferrer" className="inline-link-button">
                       Open source listing
+                      <ArrowRight size={13} />
                     </a>
-                  )}
+                  ) : null}
                 </div>
               ))
             ) : (
-              <div style={{ color: 'var(--text-muted)' }}>No imported branch samples found.</div>
+              <div className="empty-note">No imported branch samples found.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
 
       <div className="dashboard-grid">
-        <div className="section-card glass">
+        <section className="section-card glass">
           <div className="section-header">
             <div className="section-title">Alert feed</div>
             <span className="badge badge-danger">{alerts.length} active</span>
@@ -346,36 +335,49 @@ function Overview() {
                 </div>
               ))
             ) : (
-              <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
-                No unresolved alerts.
-              </div>
+              <div className="empty-note">No unresolved alerts.</div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="section-card glass">
+        <section className="section-card glass">
           <div className="section-header">
             <div className="section-title">Recent agent actions</div>
           </div>
           <div className="priority-list">
             {recentActions.length > 0 ? (
-              recentActions.map((action) => (
-                <div key={action.id} className="priority-card">
-                  <div className="priority-topline">
-                    <span className={`badge ${action.action_type === 'AUTO_PRICE_MATCH' ? 'badge-warning' : 'badge-info'}`}>
-                      {action.action_type === 'AUTO_PRICE_MATCH' ? 'Price match' : 'Supplier draft'}
-                    </span>
-                    <span className="badge badge-success">{action.status}</span>
+              recentActions.map((action) => {
+                const payload = parseActionPayload(action.data)
+                const decisionSummary = payload?.decision_summary
+
+                return (
+                  <div key={action.id} className="priority-card">
+                    <div className="priority-topline">
+                      <span className={`badge ${action.action_type === 'AUTO_PRICE_MATCH' ? 'badge-warning' : 'badge-info'}`}>
+                        {action.action_type === 'AUTO_PRICE_MATCH' ? 'Price match' : 'Supplier draft'}
+                      </span>
+                      <span className="badge badge-success">{action.status}</span>
+                    </div>
+                    <strong>{action.description}</strong>
+                    {decisionSummary ? (
+                      <>
+                        <p>{decisionSummary.reason}</p>
+                        <div className="priority-metrics">
+                          <span>{decisionSummary.competitor_name}</span>
+                          <span>Margin if matched {formatPct(decisionSummary.margin_if_matched_pct)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <p>Created at {formatDateTime(action.created_at)}</p>
+                    )}
                   </div>
-                  <strong>{action.description}</strong>
-                  <p>Created at {formatDateTime(action.created_at)}</p>
-                </div>
-              ))
+                )
+              })
             ) : (
-              <div style={{ color: 'var(--text-muted)' }}>No agent actions yet.</div>
+              <div className="empty-note">No agent actions yet.</div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )
@@ -383,13 +385,13 @@ function Overview() {
 
 function MetricCard({ title, value, detail, icon }) {
   return (
-    <div className="kpi-card glass">
-      <div className="kpi-header">
+    <div className="metric-card">
+      <div className="metric-card-head">
         <span>{title}</span>
-        {icon}
+        <div className="metric-icon">{icon}</div>
       </div>
-      <div className="kpi-value">{value}</div>
-      <div className="kpi-desc">{detail}</div>
+      <strong>{value}</strong>
+      <p>{detail}</p>
     </div>
   )
 }
@@ -406,6 +408,20 @@ function formatDateTime(isoStr) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatPct(value) {
+  if (typeof value !== 'number') return '--'
+  return `${value.toFixed(1)}%`
+}
+
+function parseActionPayload(rawData) {
+  if (!rawData) return null
+  try {
+    return JSON.parse(rawData)
+  } catch (err) {
+    return null
+  }
 }
 
 export default Overview

@@ -18,6 +18,7 @@ class Product(Base):
 
     # Relationships
     competitor_prices = relationship("CompetitorPrice", back_populates="product", cascade="all, delete-orphan")
+    competitor_links = relationship("CompetitorLink", back_populates="product", cascade="all, delete-orphan")
     pricing_indices = relationship("PricingIndex", back_populates="product", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="product", cascade="all, delete-orphan")
 
@@ -40,6 +41,20 @@ class CompetitorPrice(Base):
 
     # Relationships
     product = relationship("Product", back_populates="competitor_prices")
+
+
+class CompetitorLink(Base):
+    __tablename__ = "competitor_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    platform = Column(String(100), nullable=False, index=True)
+    url = Column(String(500), nullable=False)
+    discovery_method = Column(String(50), nullable=False, default="manual")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    product = relationship("Product", back_populates="competitor_links")
 
 
 class PricingIndex(Base):
