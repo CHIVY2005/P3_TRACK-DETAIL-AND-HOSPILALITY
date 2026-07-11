@@ -1,0 +1,27 @@
+[
+  {
+    "Barcode": "8931111111111",
+    "Product Name": "Kem chống nắng La Roche-Posay Anthelios Invisible Fluid SPF50+",
+    "Price": 450000
+  },
+  {
+    "Barcode": "8932222222222",
+    "Product Name": "Xịt khoáng La Roche-Posay Thermal Spring Water 300ml",
+    "Price": 320000
+  },
+  {
+    "Barcode": "8933333333333",
+    "Product Name": "Sữa rửa mặt Cetaphil Gentle Skin Cleanser 500ml",
+    "Price": 295000
+  },
+  {
+    "Barcode": "8934444444444",
+    "Product Name": "Nước tẩy trang Bioderma Sensibio H2O 500ml",
+    "Price": 410000
+  },
+  {
+    "Barcode": "8935555555555",
+    "Product Name": "Tinh chất dưỡng ẩm Vichy Minéral 89 50ml",
+    "Price": 620000
+  }
+]
