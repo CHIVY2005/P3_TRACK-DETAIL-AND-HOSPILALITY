@@ -11,3 +11,8 @@ python-multipart>=0.0.6
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 httpx>=0.24.0
+
+# Cao that qua Apify (Shopee/Lazada). Goi nhe, KHONG can trinh duyet.
+# Hasaki (BrightData) va Pharmacity chi dung `requests` o tren -> khong can them dep.
+# playwright / crawl4ai co tinh bo qua tren Render free (nang, can browser).
+apify-client>=1.0.0
