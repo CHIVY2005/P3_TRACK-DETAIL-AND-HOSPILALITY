@@ -1,0 +1,13 @@
+# Slim dependency set cho deploy (Render). Cac scraper nang (playwright,
+# crawl4ai, apify) va langgraph/langfuse deu import lazy + co fallback, nen
+# KHONG can o day -> build nhanh, image nhe, chay che do simulate + agent rule-based.
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+sqlalchemy>=2.0.0
+pydantic>=2.0
+pydantic-settings>=2.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+httpx>=0.24.0
