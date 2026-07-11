@@ -11,6 +11,7 @@ function ProductInsights() {
   const [selectedProductId, setSelectedProductId] = useState(cachedProducts[0]?.id ?? '')
   const [productDetail, setProductDetail] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [historyRange, setHistoryRange] = useState(7)
   const [loading, setLoading] = useState(cachedProducts.length === 0)
 
   useEffect(() => {
@@ -55,7 +56,7 @@ function ProductInsights() {
       String(product.barcode || '').includes(searchQuery)
   )
 
-  const chartData = getChartData(productDetail)
+  const chartData = getChartData(productDetail, historyRange)
   const latestCompetitorRows = getLatestCompetitorRows(productDetail)
   const currentCPI = products.find((product) => product.id === Number(selectedProductId))?.competitor_index || 100
 
@@ -227,7 +228,20 @@ function ProductInsights() {
 
               <section className="section-card glass">
                 <div className="section-header">
-                  <div className="section-title">7-day price history</div>
+                  <div className="section-title">
+                    {historyRange === 1 ? 'Intraday price history (theo giờ)' : `${historyRange}-day price history`}
+                  </div>
+                  <div className="range-toggle">
+                    {[1, 3, 7].map((range) => (
+                      <button
+                        key={range}
+                        className={`range-toggle-btn ${historyRange === range ? 'active' : ''}`}
+                        onClick={() => setHistoryRange(range)}
+                      >
+                        {range === 1 ? '1 ngày' : `${range} ngày`}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div style={{ width: '100%', height: 300 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -276,30 +290,43 @@ function Metric({ label, value, tone = 'neutral' }) {
   )
 }
 
-function getChartData(productDetail) {
+function getChartData(productDetail, rangeDays = 7) {
   if (!productDetail?.competitor_prices) return []
 
-  const dateGroups = {}
   const sortedRows = [...productDetail.competitor_prices].sort(
     (a, b) => new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime()
   )
+  if (sortedRows.length === 0) return []
 
-  sortedRows.forEach((row) => {
+  // Chỉ giữ các bản ghi trong cửa sổ rangeDays gần nhất tính từ lần scrape mới nhất.
+  const latestTime = new Date(sortedRows[sortedRows.length - 1].scraped_at).getTime()
+  const windowStart = latestTime - rangeDays * 24 * 60 * 60 * 1000
+  const rows = sortedRows.filter((row) => new Date(row.scraped_at).getTime() >= windowStart)
+
+  // range = 1 ngày: gom theo giờ:phút (intraday) để thấy từng lần scrape.
+  // range > 1 ngày: gom theo ngày, giữ giá cuối cùng trong ngày.
+  const intraday = rangeDays === 1
+  const groups = {}
+
+  rows.forEach((row) => {
     const dateValue = new Date(row.scraped_at)
-    const dateKey = dateValue.toISOString().slice(0, 10)
-    if (!dateGroups[dateKey]) {
-      dateGroups[dateKey] = {
-        sortKey: dateKey,
-        date: dateValue.toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' }),
+    const groupKey = intraday ? dateValue.toISOString().slice(0, 16) : dateValue.toISOString().slice(0, 10)
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        sortKey: groupKey,
+        date: intraday
+          ? dateValue.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+          : dateValue.toLocaleDateString('en-GB', { month: '2-digit', day: '2-digit' }),
         Guardian: productDetail.guardian_price,
       }
     }
-    dateGroups[dateKey][row.competitor_name] = row.net_price
+    groups[groupKey][row.competitor_name] = row.net_price
   })
 
-  return Object.values(dateGroups)
+  const limit = intraday ? 24 : rangeDays
+  return Object.values(groups)
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-    .slice(-7)
+    .slice(-limit)
 }
 
 function getLatestCompetitorRows(productDetail) {

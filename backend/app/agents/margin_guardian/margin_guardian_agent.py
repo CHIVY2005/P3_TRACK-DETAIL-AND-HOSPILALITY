@@ -26,6 +26,8 @@ class AgentState(TypedDict):
     competitor_name: str
     brand_name: str
     target_margin: float
+    current_margin_pct: float
+    price_gap_pct: float
     strategy: str
     decision_reason: str
     negotiation_context: str
@@ -49,6 +51,8 @@ def run_margin_analysis(state: MutableMapping[str, Any]) -> MutableMapping[str, 
     )
 
     state["target_margin"] = metrics["margin_if_matched_pct"]
+    state["current_margin_pct"] = metrics["current_margin_pct"]
+    state["price_gap_pct"] = metrics["price_gap_pct"]
     append_log(
         state,
         (
@@ -116,7 +120,9 @@ def apply_auto_match(state: MutableMapping[str, Any]) -> MutableMapping[str, Any
                         "competitor_name": state["competitor_name"],
                         "guardian_price": state["guardian_price"],
                         "competitor_price": state["competitor_price"],
+                        "current_margin_pct": state.get("current_margin_pct"),
                         "margin_if_matched_pct": state["target_margin"],
+                        "price_gap_pct": state.get("price_gap_pct"),
                     },
                 }
             ),
@@ -146,6 +152,8 @@ def run_margin_guardian_for_alert(db: Session, alert: models.Alert) -> Dict[str,
         competitor_name=latest_price.competitor_name,
         brand_name=brand_name,
         target_margin=0.0,
+        current_margin_pct=0.0,
+        price_gap_pct=0.0,
         strategy="maintain",
         decision_reason="",
         negotiation_context="",

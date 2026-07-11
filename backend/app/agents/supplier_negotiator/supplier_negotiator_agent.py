@@ -44,7 +44,9 @@ def draft_supplier_negotiation(state: MutableMapping[str, Any]) -> MutableMappin
                         "competitor_name": state["competitor_name"],
                         "guardian_price": state["guardian_price"],
                         "competitor_price": state["competitor_price"],
+                        "current_margin_pct": state.get("current_margin_pct"),
                         "margin_if_matched_pct": state["target_margin"],
+                        "price_gap_pct": state.get("price_gap_pct"),
                     },
                 }
             ),

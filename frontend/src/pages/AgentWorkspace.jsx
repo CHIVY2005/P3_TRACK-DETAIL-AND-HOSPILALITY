@@ -15,17 +15,22 @@ function AgentWorkspace() {
   const [selectedAction, setSelectedAction] = useState(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [refreshMarketData, setRefreshMarketData] = useState(false)
+  const [floorPct, setFloorPct] = useState(cached?.floorPct ?? 15)
   const terminalEndRef = useRef(null)
 
   const fetchHistory = async () => {
     try {
-      const [tasksRes, actionsRes, briefingRes, runtimeRes] = await Promise.all([
+      const [tasksRes, actionsRes, briefingRes, runtimeRes, configRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/agent/tasks?limit=10`),
         axios.get(`${API_BASE_URL}/agent/actions?limit=50`),
         axios.get(`${API_BASE_URL}/agent/briefing?limit=4`),
         axios.get(`${API_BASE_URL}/agent/runtime-status`),
+        axios.get(`${API_BASE_URL}/agent/config`).catch(() => null),
       ])
 
+      if (configRes?.data?.min_margin != null) {
+        setFloorPct(configRes.data.min_margin * 100)
+      }
       setTasks(tasksRes.data)
       setActions(actionsRes.data)
       setBriefing(briefingRes.data)
@@ -36,6 +41,7 @@ function AgentWorkspace() {
         briefing: briefingRes.data,
         runtimeStatus: runtimeRes.data,
         activeTask: tasksRes.data[0] ?? null,
+        floorPct: configRes?.data?.min_margin != null ? configRes.data.min_margin * 100 : floorPct,
       })
 
       const active = tasksRes.data.find((task) => task.status === 'Running' || task.status === 'Pending')
@@ -270,16 +276,7 @@ function AgentWorkspace() {
                       <p className="action-card-desc">{action.description}</p>
 
                       {decisionSummary ? (
-                        <div className="action-reasoning-box">
-                          <strong>{decisionSummary.strategy === 'match' ? 'Why match' : 'Why negotiate'}</strong>
-                          <p>{decisionSummary.reason}</p>
-                          <div className="action-reasoning-metrics">
-                            <span>{decisionSummary.competitor_name}</span>
-                            <span>Guardian {formatCurrency(decisionSummary.guardian_price)}</span>
-                            <span>Competitor {formatCurrency(decisionSummary.competitor_price)}</span>
-                            <span>Margin if matched {formatPct(decisionSummary.margin_if_matched_pct)}</span>
-                          </div>
-                        </div>
+                        <MarginExplainer summary={decisionSummary} floorPct={floorPct} />
                       ) : null}
 
                       {action.action_type === 'SUPPLIER_EMAIL_DRAFT' ? (
@@ -346,16 +343,7 @@ function AgentWorkspace() {
 
             <div className="email-draft-container">
               {selectedAction.email.decision_summary ? (
-                <div className="action-reasoning-box">
-                  <strong>{selectedAction.email.decision_summary.strategy === 'match' ? 'Why match' : 'Why negotiate'}</strong>
-                  <p>{selectedAction.email.decision_summary.reason}</p>
-                  <div className="action-reasoning-metrics">
-                    <span>{selectedAction.email.decision_summary.competitor_name}</span>
-                    <span>Guardian {formatCurrency(selectedAction.email.decision_summary.guardian_price)}</span>
-                    <span>Competitor {formatCurrency(selectedAction.email.decision_summary.competitor_price)}</span>
-                    <span>Margin if matched {formatPct(selectedAction.email.decision_summary.margin_if_matched_pct)}</span>
-                  </div>
-                </div>
+                <MarginExplainer summary={selectedAction.email.decision_summary} floorPct={floorPct} />
               ) : null}
               <div className="email-field">
                 <span className="email-field-label">Subject</span>
@@ -388,6 +376,62 @@ function AgentWorkspace() {
           </div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function MarginExplainer({ summary, floorPct }) {
+  const current = summary.current_margin_pct
+  const matched = summary.margin_if_matched_pct
+  const floor = typeof floorPct === 'number' ? floorPct : 15
+  const isMatch = summary.strategy === 'match'
+  const belowFloor = typeof matched === 'number' && matched < floor
+
+  const values = [current, matched, floor].filter((v) => typeof v === 'number')
+  const scaleMax = Math.max(1, ...values.map((v) => Math.abs(v)))
+  const widthOf = (v) => (typeof v === 'number' ? `${Math.max(0, (v / scaleMax) * 100)}%` : '0%')
+
+  const rows = [
+    { key: 'current', label: 'Biên hiện tại', value: current, tone: 'neutral' },
+    { key: 'floor', label: `Sàn tối thiểu (${floor.toFixed(0)}%)`, value: floor, tone: 'floor' },
+    {
+      key: 'matched',
+      label: 'Biên nếu match giá',
+      value: matched,
+      tone: belowFloor ? 'bad' : 'good',
+    },
+  ]
+
+  const conclusion = isMatch
+    ? `Match giá vẫn giữ biên ${formatPct(matched)} (trên sàn ${floor.toFixed(0)}%) → ĐỀ XUẤT MATCH`
+    : `Match giá sẽ kéo biên xuống ${formatPct(matched)} (dưới sàn ${floor.toFixed(0)}%) → ĐÀM PHÁN NCC`
+
+  return (
+    <div className={`margin-explainer ${isMatch ? 'is-match' : 'is-negotiate'}`}>
+      <div className="margin-explainer-head">
+        <strong>Vì sao {isMatch ? 'MATCH' : 'NEGOTIATE'}?</strong>
+        <span>{summary.competitor_name}</span>
+      </div>
+      <div className="margin-bars">
+        {rows.map((row) => (
+          <div className="margin-bar-row" key={row.key}>
+            <span className="margin-bar-label">{row.label}</span>
+            <div className="margin-bar-track">
+              <span className={`margin-bar-fill tone-${row.tone}`} style={{ width: widthOf(row.value) }} />
+            </div>
+            <span className={`margin-bar-value tone-${row.tone}`}>
+              {formatPct(row.value)}
+              {row.key === 'matched' && belowFloor ? ' ✗' : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className={`margin-conclusion ${belowFloor ? 'bad' : 'good'}`}>{conclusion}</p>
+      <div className="margin-explainer-foot">
+        <span>Guardian {formatCurrency(summary.guardian_price)}</span>
+        <span>Đối thủ {formatCurrency(summary.competitor_price)}</span>
+        {typeof summary.price_gap_pct === 'number' ? <span>Chênh giá {formatPct(summary.price_gap_pct)}</span> : null}
+      </div>
     </div>
   )
 }
