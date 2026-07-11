@@ -230,3 +230,26 @@ Cơ chế ReAct được thể hiện qua các bước chạy tuần tự của 
 3. **Observation (Quan sát kết quả)**: Agent ghi nhận kết quả phản hồi từ các tool và cập nhật trạng thái hoạt động lên hệ thống (LangGraph state) để tiếp tục bước tiếp theo.
 
 * **Điểm cải tiến đặc biệt**: Trong môi trường doanh nghiệp nhạy cảm về giá, việc để LLM tự do tạo vòng lặp ReAct sinh chữ có nguy cơ gây lỗi ảo giác (hallucination) nghiêm trọng. Do đó, hệ thống sử dụng **LangGraph** để xây dựng đồ thị trạng thái **Deterministic ReAct**, định hướng cứng luồng đi của Agent theo các chốt chặn tài chính an toàn nhưng vẫn xuất ra giải thích lập luận (Chain of Thought) rõ ràng trên giao diện cho con người kiểm soát.
+
+---
+
+### Q16: Dữ liệu cào về đối thủ được xử lý như thế nào và lưu trữ trong cơ sở dữ liệu gồm bao nhiêu cột?
+
+**Trả lời:**
+* **Cơ chế xử lý**: Dữ liệu thô cào về đi qua bộ Mapper trong [platform_mappers.py](file:///c:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/backend/app/services/platform_mappers.py) để:
+  * Trích xuất thông tin voucher dạng text (ví dụ: *"giảm 15k"*) bằng Regex để tính ra giá thực mua cuối cùng (`net_price` hiệu dụng).
+  * Lọc nhiễu, loại bỏ các giá bất thường lệch quá 50% (`is_suspicious`).
+  * Chuẩn hóa trạng thái kho hàng của đối thủ (như `oos`, `soldout`) về định dạng chuẩn duy nhất là `OUT_OF_STOCK` hoặc `IN_STOCK`.
+* **Cấu trúc lưu trữ**: Bản ghi giá đối thủ cuối cùng được lưu trữ vào bảng `competitor_prices` gồm **12 cột**:
+  1. `id` (Khóa chính)
+  2. `product_id` (Khóa ngoại sản phẩm Guardian)
+  3. `competitor_name` (Tên sàn đối thủ)
+  4. `raw_price` (Giá niêm yết gốc đối thủ)
+  5. `discount` (Chiết khấu trực tiếp)
+  6. **`net_price` (Giá thực tế sau voucher/combo)**
+  7. `stock_status` (Trạng thái kho hàng)
+  8. `is_suspicious` (Có bất thường không)
+  9. `voucher_details` (Chi tiết voucher)
+  10. `promo_mechanics` (Tên khuyến mãi)
+  11. `url` (Link sản phẩm đối thủ)
+  12. `scraped_at` (Thời gian cào giá)
