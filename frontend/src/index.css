@@ -304,6 +304,22 @@ a {
   gap: 16px;
 }
 
+.business-kpi-section {
+  padding: 4px 0;
+}
+
+.business-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.section-caption {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .metric-card,
 .pipeline-step,
 .priority-card,
@@ -862,6 +878,31 @@ a {
   color: #f87171;
 }
 
+.terminal-live-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 8px;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.terminal-product-line {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 2px solid #facc15;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.terminal-thought-line {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(250, 204, 21, 0.18);
+  background: rgba(250, 204, 21, 0.08);
+  color: #fef08a;
+  white-space: pre-wrap;
+}
+
 .terminal-divider {
   border-bottom: 1px dashed rgba(255, 255, 255, 0.18);
   margin: 12px 0;
@@ -880,6 +921,146 @@ a {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.live-runtime-grid,
+.live-tool-row,
+.live-runtime-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-runtime-grid {
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.live-runtime-card,
+.live-thought-box {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.live-runtime-card {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.live-runtime-card strong,
+.live-tool-row strong {
+  font-size: 14px;
+}
+
+.live-runtime-card span,
+.live-runtime-label,
+.live-tool-row {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.live-thought-box {
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.live-thought-box p {
+  margin-top: 8px;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+.live-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.live-roster,
+.live-timeline {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.live-agent-row,
+.live-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+}
+
+.live-agent-row:last-child,
+.live-activity-row:last-child {
+  border-bottom: none;
+}
+
+.live-agent-row > div,
+.live-activity-row > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.live-agent-row strong,
+.live-activity-row strong {
+  display: block;
+  color: var(--text-main);
+  font-size: 12px;
+}
+
+.live-agent-row span:not(.agent-status-dot),
+.live-activity-row span:not(.activity-marker) {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.live-agent-row em {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.agent-status-dot,
+.activity-marker {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.agent-status-dot.active,
+.activity-marker.running {
+  background: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.16);
+}
+
+.agent-status-dot.completed,
+.activity-marker.success {
+  background: #16a34a;
+}
+
+.activity-marker.error {
+  background: #dc2626;
+}
+
+.live-tool-row {
+  justify-content: space-between;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.66);
+  padding: 10px 12px;
 }
 
 .reasoning-stack {
@@ -1373,6 +1554,7 @@ a {
   .pipeline-strip,
   .dashboard-grid,
   .dashboard-grid-wide,
+  .business-kpi-grid,
   .agent-console-container,
   .config-grid,
   .product-summary-card {
@@ -1438,6 +1620,7 @@ a {
   .product-kv-grid,
   .history-grid,
   .hero-metrics,
+  .business-kpi-grid,
   .signal-strip {
     grid-template-columns: 1fr;
   }

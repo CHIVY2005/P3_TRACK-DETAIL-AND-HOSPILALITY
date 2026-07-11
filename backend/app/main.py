@@ -24,7 +24,7 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-from fastapi.middleware.gzip import GzipMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 # CORS configuration - allow all origins for easy hackathon integration,
 # but can be restricted using env variables.
@@ -37,7 +37,7 @@ app.add_middleware(
 )
 
 # Enable Gzip compression to optimize transfer speeds for large payloads
-app.add_middleware(GzipMiddleware, minimum_size=1000)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Register API Routers
 app.include_router(products.router, prefix=f"{settings.API_V1_STR}/products", tags=["Products"])

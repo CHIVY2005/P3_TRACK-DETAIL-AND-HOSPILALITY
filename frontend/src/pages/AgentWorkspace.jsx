@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { Bot, CheckCircle2, ExternalLink, Mail, Send, Terminal, XCircle } from 'lucide-react'
+import { Bot, CheckCircle2, ExternalLink, Mail, Send, Sparkles, Terminal, Wrench, XCircle } from 'lucide-react'
 import { API_BASE_URL } from '../api.js'
 
 function AgentWorkspace() {
@@ -14,6 +14,15 @@ function AgentWorkspace() {
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [refreshMarketData, setRefreshMarketData] = useState(false)
   const terminalEndRef = useRef(null)
+  const liveRuntime = runtimeStatus?.agent?.live_runtime
+  const liveActivity = liveRuntime?.activity || []
+  const agentBusy = running || Boolean(runtimeStatus?.agent?.is_running)
+  const agentRoster = [
+    { key: 'orchestrator', label: 'Orchestrator', role: 'Coordinates the decision cycle' },
+    { key: 'market_observer', label: 'Market Observer', role: 'Collects and normalizes market signals' },
+    { key: 'margin_guardian', label: 'Margin Guardian', role: 'Checks price and margin safety' },
+    { key: 'supplier_negotiator', label: 'Supplier Negotiator', role: 'Prepares cost-protection actions' },
+  ]
 
   const fetchHistory = async () => {
     try {
@@ -50,15 +59,36 @@ function AgentWorkspace() {
       }
       if (runtimeRes) {
         setRuntimeStatus(runtimeRes.data)
+        if (runtimeRes.data?.agent?.is_running) {
+          setRunning(true)
+        } else if (!tasksRes?.data?.some((task) => task.status === 'Running' || task.status === 'Pending')) {
+          setRunning(false)
+        }
       }
     } catch (err) {
       console.error('Error fetching agent history', err)
     }
   }
 
+  const fetchRuntimeStatus = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/agent/runtime-status`)
+      setRuntimeStatus(res.data)
+      setRunning(Boolean(res.data?.agent?.is_running))
+    } catch (err) {
+      console.error('Error polling live agent runtime', err)
+    }
+  }
+
   useEffect(() => {
     fetchHistory()
     const interval = setInterval(fetchHistory, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    fetchRuntimeStatus()
+    const interval = setInterval(fetchRuntimeStatus, 1000)
     return () => clearInterval(interval)
   }, [])
 
@@ -152,13 +182,13 @@ function AgentWorkspace() {
               type="checkbox"
               checked={refreshMarketData}
               onChange={(event) => setRefreshMarketData(event.target.checked)}
-              disabled={running}
+              disabled={agentBusy}
             />
             <span>Refresh live market data before the decision cycle</span>
           </label>
-          <button className="btn btn-accent" onClick={handleRunAgent} disabled={running}>
-            <Bot size={16} className={running ? 'pulse' : ''} />
-            {running ? 'Cycle running...' : 'Run decision cycle'}
+          <button className="btn btn-accent" onClick={handleRunAgent} disabled={agentBusy}>
+            <Bot size={16} className={agentBusy ? 'pulse' : ''} />
+            {agentBusy ? 'Cycle running...' : 'Run decision cycle'}
           </button>
         </div>
       </section>
@@ -171,7 +201,7 @@ function AgentWorkspace() {
               <span className="term-btn yellow" />
               <span className="term-btn green" />
             </div>
-            <div className="terminal-title">guardian-agent / orchestrator</div>
+            <div className="terminal-title">guardian-agent / {formatAgentName(liveRuntime?.active_agent || 'orchestrator')}</div>
             <Terminal size={14} style={{ color: 'var(--text-muted)' }} />
           </div>
           <div className="terminal-body">
@@ -183,9 +213,30 @@ function AgentWorkspace() {
                 <div className={`terminal-status terminal-status-${activeTask.status?.toLowerCase()}`}>
                   Status: [{activeTask.status}]
                 </div>
+                <div className="terminal-live-strip">
+                  <span className={`status-pill ${agentBusy ? 'live' : 'muted'}`}>{agentBusy ? 'Live' : 'Idle'}</span>
+                  <span>Agent: {formatAgentName(liveRuntime?.active_agent)}</span>
+                  <span>Phase: {formatPhaseName(liveRuntime?.phase)}</span>
+                  <span>Tool: {formatToolName(liveRuntime?.current_tool, liveRuntime?.tool_status)}</span>
+                  {liveRuntime?.progress?.total ? (
+                    <span>
+                      Progress: {liveRuntime.progress.completed}/{liveRuntime.progress.total}
+                    </span>
+                  ) : null}
+                </div>
+                {liveRuntime?.current_product ? (
+                  <div className="terminal-product-line">
+                    SKU: {liveRuntime.current_product.name} | Product #{liveRuntime.current_product.id}
+                  </div>
+                ) : null}
+                {liveRuntime?.current_thought ? (
+                  <div className="terminal-thought-line">
+                    THOUGHT: {liveRuntime.current_thought}
+                  </div>
+                ) : null}
                 <div className="terminal-divider" />
                 <div className="terminal-log-copy">{activeTask.logs}</div>
-                {running ? <div className="blink">Coordinating tools and action proposals...</div> : null}
+                {agentBusy ? <div className="blink">Coordinating tools and action proposals...</div> : null}
               </>
             ) : (
               <div className="terminal-empty">
@@ -197,6 +248,99 @@ function AgentWorkspace() {
         </section>
 
         <section className="actions-sidebar">
+          <div className="section-card glass">
+            <div className="section-header">
+              <div className="section-title">Live agent state</div>
+              <span className={`badge ${agentBusy ? 'badge-warning' : 'badge-info'}`}>{agentBusy ? 'Running' : 'Standby'}</span>
+            </div>
+
+            <div className="live-runtime-grid">
+              <div className="live-runtime-card">
+                <div className="live-runtime-label">
+                  <Bot size={14} />
+                  Active agent
+                </div>
+                <strong>{formatAgentName(liveRuntime?.active_agent)}</strong>
+                <span>{formatPhaseName(liveRuntime?.phase)}</span>
+              </div>
+              <div className="live-runtime-card">
+                <div className="live-runtime-label">
+                  <Wrench size={14} />
+                  Current tool
+                </div>
+                <strong>{formatToolName(liveRuntime?.current_tool, liveRuntime?.tool_status)}</strong>
+                <span>{formatToolStatus(liveRuntime?.tool_status)}</span>
+              </div>
+            </div>
+
+            <div className="live-thought-box">
+              <div className="live-runtime-label">
+                <Sparkles size={14} />
+                Current thought
+              </div>
+              <p>{liveRuntime?.current_thought || 'No live reasoning message yet.'}</p>
+            </div>
+
+            <div className="live-tools-list">
+              {(liveRuntime?.recent_tools || []).length > 0 ? (
+                liveRuntime.recent_tools
+                  .slice()
+                  .reverse()
+                  .map((toolEvent, index) => (
+                    <div className="live-tool-row" key={`${toolEvent.name}-${toolEvent.at}-${index}`}>
+                      <strong>{toolEvent.name}</strong>
+                      <span className={`status-pill ${toolEvent.status === 'success' ? 'good' : toolEvent.status === 'error' ? 'bad' : 'warn'}`}>
+                        {toolEvent.status}
+                      </span>
+                    </div>
+                  ))
+              ) : (
+                <div className="empty-note">No tool execution captured yet.</div>
+              )}
+            </div>
+
+            <div className="live-roster">
+              <div className="live-runtime-label">Agent roster</div>
+              {agentRoster.map((agent) => {
+                const state = liveRuntime?.agent_states?.[agent.key]
+                const status = state?.status || 'idle'
+                return (
+                  <div className="live-agent-row" key={agent.key}>
+                    <span className={`agent-status-dot ${status}`} />
+                    <div>
+                      <strong>{agent.label}</strong>
+                      <span>{status === 'active' ? formatPhaseName(state?.phase) : agent.role}</span>
+                    </div>
+                    <em>{statusLabel(status)}</em>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="live-timeline">
+              <div className="live-runtime-label">Execution timeline</div>
+              {liveActivity.length > 0 ? (
+                liveActivity
+                  .slice()
+                  .reverse()
+                  .slice(0, 8)
+                  .map((item, index) => (
+                    <div className="live-activity-row" key={`${item.at}-${index}`}>
+                      <span className={`activity-marker ${item.status}`} />
+                      <div>
+                        <strong>{item.label}</strong>
+                        <span>
+                          {formatAgentName(item.agent)} | {formatPhaseName(item.phase)} | {formatShortTime(item.at)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+              ) : (
+                <div className="empty-note">Run the cycle to capture the live execution timeline.</div>
+              )}
+            </div>
+          </div>
+
           <div className="section-card glass section-fill">
             <div className="section-header">
               <div className="section-title">Decision evidence & trace</div>
@@ -223,6 +367,11 @@ function AgentWorkspace() {
                       <strong>{item.product_name}</strong>
                       <span className={`status-pill ${item.strategy === 'match' ? 'good' : 'warn'}`}>
                         {item.strategy}
+                      </span>
+                    </div>
+                    <div className="reasoning-card-top">
+                      <span className={`status-pill ${qualityTone(item.confidence_label)}`}>
+                        {item.confidence_label} evidence {formatPct(item.data_quality_pct)}
                       </span>
                     </div>
                     <p className="reasoning-copy">{item.rationale}</p>
@@ -402,6 +551,12 @@ function mapActionStatusTone(status) {
   return 'muted'
 }
 
+function qualityTone(label) {
+  if (label === 'High') return 'good'
+  if (label === 'Medium') return 'warn'
+  return 'bad'
+}
+
 function formatPct(value) {
   if (typeof value !== 'number') return '--'
   return `${value.toFixed(1)}%`
@@ -419,6 +574,53 @@ function parseActionPayload(rawData) {
   } catch (err) {
     return null
   }
+}
+
+function formatAgentName(value) {
+  if (!value) return 'Waiting'
+  return value
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function formatPhaseName(value) {
+  if (!value) return 'Idle'
+  return value
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function formatToolName(name, status) {
+  if (!name) return status === 'success' ? 'Completed' : 'Waiting'
+  return name
+    .split('_')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function formatToolStatus(value) {
+  if (!value) return 'No tool in flight'
+  if (value === 'running') return 'Tool executing now'
+  if (value === 'success') return 'Latest tool completed'
+  if (value === 'error') return 'Latest tool failed'
+  return value
+}
+
+function statusLabel(value) {
+  if (value === 'active') return 'Working'
+  if (value === 'completed') return 'Done'
+  return 'Standby'
+}
+
+function formatShortTime(value) {
+  if (!value) return '--:--:--'
+  return new Date(value).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
 }
 
 export default AgentWorkspace

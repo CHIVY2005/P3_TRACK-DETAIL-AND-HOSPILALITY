@@ -2,6 +2,7 @@ import os
 import random
 import asyncio
 from datetime import datetime
+from typing import Callable, Optional
 from sqlalchemy.orm import Session
 from app.db import models
 from app.config import settings
@@ -348,13 +349,21 @@ def scrape_realtime_competitor_prices(db: Session, product_id: int, force_simula
     else:
         return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id, force_simulation, commit))
 
-def run_scraper_for_all_products(db: Session):
+def run_scraper_for_all_products(
+    db: Session,
+    progress_callback: Optional[Callable[[models.Product, int, int, str], None]] = None,
+):
     # Force simulation on bulk run unless explicitly enabled in environment variables
     # to avoid launching 400 Chromium instances / blocking the server
     force_sim = os.getenv("ENABLE_REAL_SCRAPING") != "True"
     products = db.query(models.Product).all()
     results = {}
-    for p in products:
+    total = len(products)
+    for index, p in enumerate(products, start=1):
+        if progress_callback:
+            progress_callback(p, index, total, "started")
         results[p.id] = scrape_realtime_competitor_prices(db, p.id, force_simulation=force_sim, commit=False)
+        if progress_callback:
+            progress_callback(p, index, total, "completed")
     db.commit()
     return results

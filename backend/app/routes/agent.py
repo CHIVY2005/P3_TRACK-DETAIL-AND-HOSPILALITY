@@ -13,6 +13,7 @@ from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_clien
 from app.services.agent_engine import build_alert_decision_context
 from app.services.agent_runtime import create_agent_task, get_agent_runtime_status, is_agent_running, run_agent_task
 from app.services.channel_intelligence import build_channel_intelligence
+from app.services.business_kpis import build_business_kpis
 from app.services.cpi_calculator import calculate_cpi_for_product
 from app.services.daily_scheduler import get_scheduler_status
 
@@ -109,6 +110,12 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
             average_cpi=round(average_cpi, 2),
             channels_covered=channel_intelligence["summary"]["channels_with_data"],
             last_scrape_at=last_scrape_at,
+            average_data_quality_pct=channel_intelligence["summary"]["valid_observation_pct"],
+            average_decision_confidence_pct=round(
+                sum(item.get("data_quality_pct", 0.0) for item in decisions) / len(decisions), 2
+                if decisions
+                else 0.0,
+            ),
         ),
         priority_queue=[schemas.AgentBriefingPriority(**item) for item in decisions[:limit]],
         channel_summary=channel_summary,
@@ -278,6 +285,12 @@ def get_runtime_status():
         "agent": get_agent_runtime_status(),
         "scheduler": get_scheduler_status(),
     }
+
+
+@router.get("/kpis")
+def get_business_kpis(db: Session = Depends(get_db)):
+    """Return business impact and evidence quality metrics for the command center."""
+    return build_business_kpis(db)
 
 
 def _decision_sort_key(item: dict):

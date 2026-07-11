@@ -4,10 +4,9 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.agents.market_observer.market_observer_agent import build_alert_decision_context
-from app.agents.market_observer.market_observer_tools import refresh_market_prices
+from app.agents.market_observer.market_observer_agent import build_alert_decision_context, run_market_observer_cycle
 from app.agents.margin_guardian.margin_guardian_agent import run_margin_guardian_for_alert
-from app.agents.shared.runtime_support import get_langfuse_client
+from app.agents.shared.runtime_support import get_langfuse_client, set_active_agent, update_live_runtime
 
 
 def run_agentic_optimization_loop(
@@ -41,22 +40,28 @@ def run_agentic_optimization_loop(
     langfuse = get_langfuse_client()
 
     def _run_loop():
+        set_active_agent("orchestrator", phase="planning", thought="Opening the daily pricing command cycle.")
+        logs.append("[Perceive] Market Observer is collecting or loading competitor signals...")
+        task.logs = "\n".join(logs)
+        db.commit()
+        market_result = run_market_observer_cycle(db, refresh_market_data=refresh_market_data)
+        for observer_log in market_result.get("logs", []):
+            logs.append(f"  {observer_log}")
+        summary = market_result.get("summary", {})
         if refresh_market_data:
-            logs.append("[Perceive] Refreshing competitor prices across tracked channels...")
-            task.logs = "\n".join(logs)
-            db.commit()
-            scrape_results = refresh_market_prices(db)
-            item_count = sum(len(result or []) for result in scrape_results.values())
             logs.append(
-                f"[Perceive Complete] Scraper refreshed {len(scrape_results)} products and recorded {item_count} channel observations."
+                f"[Perceive Complete] Scraper refreshed {summary.get('products_refreshed', 0)} products and "
+                f"recorded {summary.get('observations_recorded', 0)} channel observations via {summary.get('source', 'configured connectors')}."
             )
-            task.logs = "\n".join(logs)
-            db.commit()
         else:
-            logs.append("[Perceive] Skipped live refresh. Using latest stored competitor data.")
-            task.logs = "\n".join(logs)
-            db.commit()
+            logs.append(
+                f"[Perceive Complete] Reused {summary.get('signals_ready', 0)} stored market signal sets "
+                "without a live scrape."
+            )
+        task.logs = "\n".join(logs)
+        db.commit()
 
+        set_active_agent("market_observer", phase="sensemaking", thought="Ranking unresolved alerts and selecting the most important SKU decisions.")
         alerts = db.query(models.Alert).filter(models.Alert.is_resolved == False).all()
         selected_alerts = _select_priority_alerts(db, alerts, max_alerts)
         logs.append(
@@ -67,6 +72,7 @@ def run_agentic_optimization_loop(
         db.commit()
 
         if not selected_alerts:
+            set_active_agent("orchestrator", phase="completed", thought="No active alerts were found, so no action is required.")
             logs.append("No active alerts. System remains stable.")
             task.status = "Completed"
             task.completed_at = datetime.utcnow()
@@ -75,6 +81,11 @@ def run_agentic_optimization_loop(
             return task
 
         for alert in selected_alerts:
+            set_active_agent(
+                "margin_guardian",
+                phase="reasoning",
+                thought=f"Reviewing alert #{alert.id} and deciding whether Guardian should match price or protect margin.",
+            )
             agent_result = run_margin_guardian_for_alert(db, alert)
             for agent_log in agent_result.get("logs", []):
                 logs.append(f"  {agent_log}")
@@ -105,8 +116,16 @@ def run_agentic_optimization_loop(
             db.commit()
             task.logs = "\n".join(logs)
             db.commit()
+            update_live_runtime(
+                active_agent=agent_result.get("active_agent", "margin_guardian"),
+                phase="action_queued",
+                current_tool=None,
+                tool_status="success",
+                current_thought=agent_result.get("decision_reason") or "Action proposal has been recorded for approval.",
+            )
 
         task.status = "Completed"
+        set_active_agent("orchestrator", phase="completed", thought="All selected alerts have been processed and queued for commercial review.")
         logs.append("[Act Complete] All selected alerts were processed through the pricing workflow.")
         task.completed_at = datetime.utcnow()
         task.logs = "\n".join(logs)

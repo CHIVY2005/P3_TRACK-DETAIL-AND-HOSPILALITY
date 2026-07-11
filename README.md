@@ -327,6 +327,8 @@ Bo test hien tai kiem tra:
 
 ## 10. Tai lieu nen doc tiep
 
+- [Codebase documentation tong hop](docs/CODEBASE_DOCUMENTATION.md)
+
 - [CODEBASE_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/CODEBASE_GUIDE.md)
 - [End-to-end workflow va database modes](docs/END_TO_END_WORKFLOW.md)
 - [Current architecture](docs/ARCHITECTURE_DIAGRAM.md)

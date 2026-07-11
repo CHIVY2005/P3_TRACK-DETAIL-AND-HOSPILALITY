@@ -1,10 +1,15 @@
 from typing import Any, MutableMapping
 
-from app.agents.shared.runtime_support import append_log, dumps_json, run_agent_tool
+from app.agents.shared.runtime_support import append_log, dumps_json, run_agent_tool, set_active_agent
 from app.agents.supplier_negotiator.supplier_negotiator_tools import generate_supplier_email, lookup_supplier_policy
 
 
 def draft_supplier_negotiation(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    set_active_agent(
+        "supplier_negotiator",
+        phase="negotiation",
+        thought=f"Margin floor is at risk, so I am preparing supplier support material for product #{state['product_id']}.",
+    )
     policy_result = run_agent_tool(
         state,
         "query_supplier_policy",

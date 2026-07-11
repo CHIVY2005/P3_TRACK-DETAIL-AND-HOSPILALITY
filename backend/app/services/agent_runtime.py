@@ -4,7 +4,13 @@ from typing import Optional
 
 from app.db import models
 from app.db.session import SessionLocal
-from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_client
+from app.agents.shared.runtime_support import (
+    flush_langfuse,
+    get_langfuse_client,
+    get_live_runtime_snapshot,
+    reset_live_runtime,
+    update_live_runtime,
+)
 from app.services.agent_engine import run_agentic_optimization_loop
 
 
@@ -34,6 +40,7 @@ def get_agent_runtime_status() -> dict:
             "last_error": _last_error,
             "last_trace_id": _last_trace_id,
             "last_trace_url": _last_trace_url,
+            "live_runtime": get_live_runtime_snapshot(),
         }
 
 
@@ -69,9 +76,26 @@ def run_agent_task(task_id: int, refresh_market_data: bool, source: str) -> bool
         _last_error = None
         _last_trace_id = None
         _last_trace_url = None
+    reset_live_runtime(run_id=f"task-{task_id}")
+    update_live_runtime(
+        active_agent="orchestrator",
+        phase="queued",
+        current_thought=f"Task #{task_id} accepted from {source}. Preparing pricing cycle.",
+    )
 
     db = SessionLocal()
     try:
+        def run_and_validate():
+            result = run_agentic_optimization_loop(
+                db,
+                task_id=task_id,
+                refresh_market_data=refresh_market_data,
+            )
+            if result.status == "Failed":
+                failure_log = (result.logs or "Agent task failed.").splitlines()[-1]
+                raise RuntimeError(failure_log)
+            return result
+
         client = get_langfuse_client()
         if client:
             with client.start_as_current_observation(
@@ -83,11 +107,7 @@ def run_agent_task(task_id: int, refresh_market_data: bool, source: str) -> bool
                     "refresh_market_data": refresh_market_data,
                 },
             ) as span:
-                run_agentic_optimization_loop(
-                    db,
-                    task_id=task_id,
-                    refresh_market_data=refresh_market_data,
-                )
+                result = run_and_validate()
                 trace_id = client.get_current_trace_id()
                 trace_url = client.get_trace_url() if trace_id else None
                 with _state_lock:
@@ -103,14 +123,16 @@ def run_agent_task(task_id: int, refresh_market_data: bool, source: str) -> bool
                     }
                 )
         else:
-            run_agentic_optimization_loop(
-                db,
-                task_id=task_id,
-                refresh_market_data=refresh_market_data,
-            )
+            run_and_validate()
     except Exception as exc:
         with _state_lock:
             _last_error = str(exc)
+        update_live_runtime(
+            active_agent="orchestrator",
+            phase="failed",
+            current_thought=f"Run failed: {exc}",
+            tool_status="error",
+        )
         print(f"Error in agent task ({source}): {exc}")
     finally:
         db.close()
@@ -118,6 +140,16 @@ def run_agent_task(task_id: int, refresh_market_data: bool, source: str) -> bool
         with _state_lock:
             _is_agent_running = False
             _last_completed_at = datetime.utcnow().isoformat()
+        if _last_error:
+            update_live_runtime(phase="failed")
+        else:
+            update_live_runtime(
+                active_agent="orchestrator",
+                phase="completed",
+                current_tool=None,
+                tool_status="success",
+                current_thought="Decision cycle completed. Waiting for the next trigger.",
+            )
         _agent_lock.release()
 
     return True

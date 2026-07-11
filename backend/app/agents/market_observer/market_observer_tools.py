@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Callable, Dict, Optional
 
 from sqlalchemy.orm import Session
 
@@ -7,8 +7,11 @@ from app.scraper.scraper_engine import run_scraper_for_all_products
 from app.services.channel_intelligence import get_latest_channel_observations
 
 
-def refresh_market_prices(db: Session) -> Dict[int, list]:
-    return run_scraper_for_all_products(db)
+def refresh_market_prices(
+    db: Session,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[int, list]:
+    return run_scraper_for_all_products(db, progress_callback=progress_callback)
 
 
 def get_latest_clean_competitor_prices(db: Session, product_id: int):

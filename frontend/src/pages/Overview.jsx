@@ -13,16 +13,20 @@ import {
 } from 'recharts'
 import {
   Activity,
+  CheckCircle2,
   Clock3,
   Cpu,
   Database,
+  Gauge,
   Radar,
   RefreshCw,
   ServerOff,
+  ShieldCheck,
   ShieldAlert,
   Sparkles,
   Target,
   TrendingUp,
+  Wallet,
   Workflow,
   X,
 } from 'lucide-react'
@@ -33,6 +37,7 @@ function Overview() {
   const [alerts, setAlerts] = useState([])
   const [briefing, setBriefing] = useState(null)
   const [channelIntelligence, setChannelIntelligence] = useState(null)
+  const [businessKpis, setBusinessKpis] = useState(null)
   const [recentActions, setRecentActions] = useState([])
   const [loading, setLoading] = useState(true)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
@@ -49,9 +54,10 @@ function Overview() {
         axios.get(`${API_BASE_URL}/agent/briefing?limit=5`),
         axios.get(`${API_BASE_URL}/agent/actions?limit=5`),
         axios.get(`${API_BASE_URL}/pricing/channel-index`),
+        axios.get(`${API_BASE_URL}/agent/kpis`),
       ])
 
-      const setters = [setStats, setAlerts, setBriefing, setRecentActions, setChannelIntelligence]
+      const setters = [setStats, setAlerts, setBriefing, setRecentActions, setChannelIntelligence, setBusinessKpis]
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           setters[index](result.value.data)
@@ -139,6 +145,7 @@ function Overview() {
   const briefingSummary = briefing?.summary
   const channels = channelIntelligence?.channels || []
   const queue = briefing?.priority_queue || []
+  const reviewedActions = (businessKpis?.approved_actions || 0) + (businessKpis?.rejected_actions || 0)
   const catalogIsEmpty = !loading && (
     summary?.monitored_sku === 0 || (!summary && stats?.total_sku === 0)
   )
@@ -238,6 +245,45 @@ function Overview() {
         />
       </section>
 
+      <section className="business-kpi-section">
+        <div className="section-header">
+          <div>
+            <div className="section-title section-title-inline">
+              <Wallet size={18} />
+              <span>Commercial impact scorecard</span>
+            </div>
+            <p className="section-caption">Evidence quality and estimated value under management</p>
+          </div>
+          <span className="badge badge-info">Rule-based and auditable</span>
+        </div>
+        <div className="business-kpi-grid">
+          <MetricCard
+            title="Decision confidence"
+            value={formatPct(businessKpis?.average_decision_confidence_pct)}
+            detail={`${businessKpis?.high_confidence_decisions ?? 0}/${businessKpis?.actionable_decisions ?? 0} actionable decisions have high-confidence evidence`}
+            icon={<Gauge size={16} />}
+          />
+          <MetricCard
+            title="Margin exposure under review"
+            value={formatCurrency(businessKpis?.estimated_margin_exposure_vnd)}
+            detail="Estimated price-gap value across the active decision queue"
+            icon={<ShieldAlert size={16} />}
+          />
+          <MetricCard
+            title="Protected by negotiation"
+            value={formatCurrency(businessKpis?.estimated_protected_exposure_vnd)}
+            detail="Estimated exposure routed to supplier protection instead of unsafe matching"
+            icon={<ShieldCheck size={16} />}
+          />
+          <MetricCard
+            title="Recommendation adoption"
+            value={formatPct(businessKpis?.recommendation_acceptance_pct)}
+            detail={`${businessKpis?.approved_actions ?? 0} approved of ${reviewedActions} reviewed actions`}
+            icon={<CheckCircle2 size={16} />}
+          />
+        </div>
+      </section>
+
       <div className="dashboard-grid dashboard-grid-wide">
         <section className="section-card glass">
           <div className="section-header">
@@ -274,6 +320,9 @@ function Overview() {
                     </span>
                     <span className={`badge ${item.severity === 'High' ? 'badge-danger' : 'badge-warning'}`}>
                       {item.severity}
+                    </span>
+                    <span className={`badge ${qualityBadgeClass(item.confidence_label)}`}>
+                      {item.confidence_label} evidence {formatPct(item.data_quality_pct)}
                     </span>
                   </div>
                   <strong>{item.product_name}</strong>
@@ -481,6 +530,11 @@ function formatPct(value) {
   return `${value.toFixed(1)}%`
 }
 
+function formatCurrency(value) {
+  if (typeof value !== 'number') return '--'
+  return `${Math.round(value).toLocaleString('en-GB')} VND`
+}
+
 function formatIndex(value) {
   if (typeof value !== 'number') return '--'
   return value.toFixed(1)
@@ -502,6 +556,12 @@ function actionStatusClass(status) {
   if (status === 'Approved' || status === 'Executed') return 'badge-success'
   if (status === 'Rejected') return 'badge-danger'
   return 'badge-warning'
+}
+
+function qualityBadgeClass(label) {
+  if (label === 'High') return 'badge-success'
+  if (label === 'Medium') return 'badge-warning'
+  return 'badge-danger'
 }
 
 function parseActionPayload(rawData) {

@@ -12,6 +12,8 @@ from app.agents.shared.runtime_support import (
     dumps_json,
     get_langfuse_client,
     run_agent_tool,
+    set_active_agent,
+    set_current_thought,
     timestamp,
 )
 from app.agents.supplier_negotiator.supplier_negotiator_agent import draft_supplier_negotiation
@@ -36,6 +38,11 @@ class AgentState(TypedDict):
 
 
 def run_margin_analysis(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    set_active_agent(
+        "margin_guardian",
+        phase="analysis",
+        thought=f"Checking the commercial impact of matching price for product #{state['product_id']}.",
+    )
     append_log(state, f"[{timestamp()}] [Observation] Initiating commercial analysis for Product ID {state['product_id']}...")
     metrics = run_agent_tool(
         state,
@@ -69,6 +76,11 @@ def run_margin_analysis(state: MutableMapping[str, Any]) -> MutableMapping[str, 
 
 
 def determine_strategy(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    set_active_agent(
+        "margin_guardian",
+        phase="strategy",
+        thought="Comparing post-match margin against the configured safety floor.",
+    )
     append_log(state, f"[{timestamp()}] [Reasoning] Evaluating margin safety...")
     cfg = get_agent_config()
     min_margin_pct = cfg.get("min_margin", 0.15) * 100.0
@@ -96,12 +108,18 @@ def determine_strategy(state: MutableMapping[str, Any]) -> MutableMapping[str, A
 
     state["strategy"] = strategy
     state["decision_reason"] = reason
+    set_current_thought(thought.replace("THOUGHT: ", ""))
     append_log(state, f"  [Reasoning Output] Strategy: {strategy.upper()}")
     append_log(state, f"  {thought}")
     return state
 
 
 def apply_auto_match(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    set_active_agent(
+        "margin_guardian",
+        phase="action",
+        thought=f"Creating a price alignment proposal against {state['competitor_name']}.",
+    )
     proposal = run_agent_tool(
         state,
         "adjust_system_price",
@@ -206,9 +224,12 @@ def run_margin_guardian_for_alert(db: Session, alert: models.Alert) -> Dict[str,
                     "actions_created": len(result.get("actions_created", [])),
                 }
             )
+            result["active_agent"] = "margin_guardian" if result.get("strategy") == "match" else "supplier_negotiator"
             return result
 
-    return _execute_margin_guardian_graph(initial_state)
+    result = _execute_margin_guardian_graph(initial_state)
+    result["active_agent"] = "margin_guardian" if result.get("strategy") == "match" else "supplier_negotiator"
+    return result
 
 
 def _execute_margin_guardian_graph(initial_state: AgentState) -> Dict[str, Any]:
