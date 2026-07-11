@@ -2,6 +2,8 @@ import os
 import re
 import random
 import asyncio
+import difflib
+import unicodedata
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.db import models
@@ -36,13 +38,14 @@ APIFY_MARKET_COUNTRY = os.getenv("APIFY_MARKET_COUNTRY", "vn")
 
 
 def _shopee_xtracto_input(search_target: str) -> dict:
-    # Schema: xtracto/shopee-scraper (mode=keyword). country supports 'vn'.
+    # Schema: xtracto/shopee-scraper (mode=keyword). Fetch a few candidates so the
+    # matcher can skip combos/wrong sizes instead of blindly taking the first hit.
     return {
         "mode": "keyword",
         "keyword": search_target,
         "country": APIFY_MARKET_COUNTRY,
         "sort": "relevancy",
-        "maxProducts": 1,
+        "maxProducts": MATCH_CANDIDATES,
     }
 
 
@@ -81,17 +84,70 @@ APIFY_ACTORS = {
 }
 
 
+# ---- Product matching -------------------------------------------------------------
+# Scrapers search by keyword and can return combos / different sizes; pick the candidate
+# that best matches the guardian product name and sits in a sane price band instead of
+# blindly taking the first result (which is what triggers "Suspicious" anomaly flags).
+MATCH_CANDIDATES = int(os.getenv("SCRAPER_MATCH_CANDIDATES", "6"))
+_COMBO_WORDS = ("combo", "set", "pack", "gift", "bundle", "bundle", "qua tang", "tang kem", "x2", "x3", "x 2", "x 3")
+
+
+def _normalize_name(text: str) -> str:
+    stripped = unicodedata.normalize("NFD", text or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9 ]", " ", stripped.lower())
+
+
+def _match_score(name: str, price, product_name: str, guardian_price) -> float:
+    norm_candidate = _normalize_name(name)
+    norm_target = _normalize_name(product_name)
+    if not norm_candidate:
+        return -1.0
+
+    ratio = difflib.SequenceMatcher(None, norm_candidate, norm_target).ratio()
+    target_tokens = set(norm_target.split())
+    overlap = len(target_tokens & set(norm_candidate.split())) / max(len(target_tokens), 1)
+    score = 0.6 * ratio + 0.4 * overlap
+
+    if any(word in norm_candidate for word in _COMBO_WORDS):
+        score -= 0.30  # combos/gift sets distort per-unit price
+
+    # Price sanity vs guardian price: penalize far-off prices (likely wrong item/size).
+    try:
+        if guardian_price and price:
+            rel = float(price) / float(guardian_price)
+            if rel > 2.2 or rel < 0.35:
+                score -= 0.40
+            elif rel > 1.6 or rel < 0.55:
+                score -= 0.15
+    except (TypeError, ValueError):
+        pass
+
+    return score
+
+
+def _best_candidate(candidates: list, product_name: str, guardian_price) -> dict:
+    """Pick the normalized candidate ({name, price, ...}) that best matches the SKU."""
+    best, best_score = None, None
+    for candidate in candidates:
+        if not candidate or not candidate.get("price"):
+            continue
+        score = _match_score(candidate.get("name") or "", candidate.get("price"), product_name, guardian_price)
+        if best_score is None or score > best_score:
+            best, best_score = candidate, score
+    return best
+
+
 def apify_enabled() -> bool:
     """Real Apify calls cost money (~$0.20/SKU), so they are OFF unless explicitly
     enabled. Without this, one bulk refresh of 200 SKUs could burn ~$40 of credit."""
     return os.getenv("APIFY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
-async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
+async def scrape_via_apify(search_target: str, competitor_name: str, guardian_price=None) -> dict:
     """
     Integrates Apify using the user's platform credits. Runs the configured marketplace
-    actor for a keyword search and returns the first raw item (mapped downstream by
-    map_marketplace_result). Returns None on any miss so the pipeline falls back.
+    actor for a keyword search and returns the best-matching candidate (mapped downstream
+    by map_marketplace_result). Returns None on any miss so the pipeline falls back.
     """
     if not apify_enabled():
         return None
@@ -118,7 +174,7 @@ async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
             run = client.actor(actor_id).call(
                 run_input=run_input,
                 run_timeout=timedelta(seconds=APIFY_TIMEOUT_SECS),
-                max_items=1,
+                max_items=MATCH_CANDIDATES,
                 max_total_charge_usd=APIFY_MAX_CHARGE_USD,
             )
             # apify-client 3.x returns a typed Run object; normalize to get the dataset id.
@@ -133,9 +189,10 @@ async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
                     asyncio.to_thread(_run_actor), timeout=APIFY_TIMEOUT_SECS + 10
                 )
                 if results:
-                    # Normalize the actor-specific shape, then hand to the shared mapper
-                    # (price / original_price / name / url / availability / rating).
-                    return normalize(results[0])
+                    # Normalize every candidate, then pick the one that best matches the
+                    # guardian SKU (name + price band) instead of blindly taking the first.
+                    candidates = [normalize(item) for item in results]
+                    return _best_candidate(candidates, search_target, guardian_price)
             except Exception as e:
                 print(f"Apify scrape failed for {competitor_name} (attempt {attempt + 1}): {e}")
     except Exception as e:
@@ -234,9 +291,9 @@ PHARMACITY_API = os.getenv(
 )
 
 
-async def scrape_via_pharmacity_api(search_target: str, competitor_name: str) -> dict:
+async def scrape_via_pharmacity_api(search_target: str, competitor_name: str, guardian_price=None) -> dict:
     """Hit Pharmacity's public search JSON API directly (free, no proxy/render needed).
-    Prices live in data.items[].variants[]."""
+    Prices live in data.items[].variants[]; pick the best-matching item."""
     if competitor_name != "Pharmacity":
         return None
 
@@ -253,25 +310,28 @@ async def scrape_via_pharmacity_api(search_target: str, competitor_name: str) ->
     try:
         data = await asyncio.wait_for(asyncio.to_thread(_fetch_json), timeout=settings.REQUEST_TIMEOUT + 5)
         items = ((data or {}).get("data") or {}).get("items") or []
+
+        candidates = []
         for item in items:
             variants = item.get("variants") or []
-            if not variants:
+            if not variants or not variants[0].get("price"):
                 continue
             variant = variants[0]
-            net_price = variant.get("price")
-            if not net_price:
-                continue
-            raw_price = variant.get("original_price") or net_price
+            raw_price = variant.get("original_price") or variant.get("price")
             stock = "IN_STOCK" if (variant.get("stock_status") or "").upper() == "AVAILABLE" else "OUT_OF_STOCK"
-            return {
+            candidates.append({
+                "name": item.get("name"),
                 "raw_price": float(raw_price),
-                "net_price": float(net_price),
-                "discount": max(float(raw_price) - float(net_price), 0.0),
+                "net_price": float(variant["price"]),
+                "price": float(variant["price"]),  # used by the matcher
+                "discount": max(float(raw_price) - float(variant["price"]), 0.0),
                 "stock_status": stock,
                 "voucher_details": None,
                 "promo_mechanics": "Pharmacity API",
                 "url": f"https://www.pharmacity.vn/{item.get('slug', '')}",
-            }
+            })
+
+        return _best_candidate(candidates, search_target, guardian_price)
     except Exception as e:
         print(f"Pharmacity API failed: {e}")
 
@@ -462,7 +522,7 @@ async def _fetch_competitor_price(product, competitor: str, link_url):
 
     # 1. Try real Apify integration for Shopee/Lazada
     if competitor in ["Shopee", "Lazada"]:
-        price_data = await scrape_via_apify(product.name or product.barcode, competitor)
+        price_data = await scrape_via_apify(product.name or product.barcode, competitor, product.guardian_price)
         if price_data:
             price_data = map_marketplace_result(competitor, price_data, link_url)
 
@@ -476,7 +536,7 @@ async def _fetch_competitor_price(product, competitor: str, link_url):
 
     # 3a. Pharmacity: hit its public search JSON API directly (free, reliable).
     if not price_data and competitor in ["Pharmacity"]:
-        price_data = await scrape_via_pharmacity_api(product.name or product.barcode, competitor)
+        price_data = await scrape_via_pharmacity_api(product.name or product.barcode, competitor, product.guardian_price)
 
     # 3b. Fall back to Crawl4AI for independent web pages.
     if not price_data and competitor in ["Pharmacity"]:
