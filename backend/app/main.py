@@ -29,6 +29,7 @@ def ensure_compat_schema() -> None:
                 "ALTER TABLE competitor_prices ADD COLUMN IF NOT EXISTS promo_mechanics VARCHAR(255);",
                 "ALTER TABLE competitor_prices ADD COLUMN IF NOT EXISTS url VARCHAR(500);",
                 "ALTER TABLE competitor_prices ADD COLUMN IF NOT EXISTS raw_payload JSONB;",
+                "ALTER TABLE agent_actions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Pending' NOT NULL;",
             ]
         )
     elif dialect == "sqlite":
@@ -40,6 +41,7 @@ def ensure_compat_schema() -> None:
                 "ALTER TABLE competitor_prices ADD COLUMN promo_mechanics VARCHAR(255);",
                 "ALTER TABLE competitor_prices ADD COLUMN url VARCHAR(500);",
                 "ALTER TABLE competitor_prices ADD COLUMN raw_payload JSON;",
+                "ALTER TABLE agent_actions ADD COLUMN status VARCHAR(50) DEFAULT 'Pending' NOT NULL;",
             ]
         )
 

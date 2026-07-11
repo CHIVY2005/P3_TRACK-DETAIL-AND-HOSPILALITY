@@ -1,5 +1,9 @@
 import asyncio
+import json
+import logging
 import random
+import re
+import unicodedata
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -12,13 +16,12 @@ from app.services.cpi_calculator import calculate_cpi_for_product, check_price_a
 from app.services.link_discovery import ensure_competitor_link
 from app.services.scrapers import CompetitorPriceDTO, ScraperFactory
 
+logger = logging.getLogger(__name__)
 
-COMPETITORS = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity", "Hasaki"]
+COMPETITORS = ["Shopee", "Lazada", "Pharmacity", "Hasaki"]
 _PLATFORM_KEY_MAP = {
     "Shopee": "shopee",
     "Lazada": "lazada",
-    "TikTok Shop": "tiktok_shop",
-    "GrabMart": "grabmart",
     "Pharmacity": "pharmacity",
     "Hasaki": "hasaki",
 }
@@ -26,6 +29,85 @@ _PLATFORM_KEY_MAP = {
 
 def _platform_key(platform_name: str) -> str:
     return _PLATFORM_KEY_MAP.get(platform_name, platform_name.lower().replace(" ", "_"))
+
+
+def _normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value or "")
+    ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", ascii_text.lower()).strip()
+
+
+def _tokenize(value: str) -> set[str]:
+    return {token for token in _normalize_text(value).split() if len(token) > 1}
+
+
+def _name_similarity_score(product_name: str, candidate_name: str) -> float:
+    product_tokens = _tokenize(product_name)
+    candidate_tokens = _tokenize(candidate_name)
+    if not product_tokens or not candidate_tokens:
+        return 0.0
+
+    overlap = product_tokens.intersection(candidate_tokens)
+    return len(overlap) / max(len(product_tokens), len(candidate_tokens))
+
+
+def _barcode_matches(product: models.Product, dto: CompetitorPriceDTO) -> bool:
+    payload_barcode = str((dto.raw_payload or {}).get("barcode") or "").strip()
+    product_barcode = str(product.barcode or "").strip()
+    return bool(payload_barcode and product_barcode and payload_barcode == product_barcode)
+
+
+def _dto_match_score(product: models.Product, dto: CompetitorPriceDTO) -> float:
+    candidate_name = dto.product_name or ""
+    if not candidate_name:
+        return 0.0
+
+    product_name_norm = _normalize_text(product.name or "")
+    candidate_name_norm = _normalize_text(candidate_name)
+    if not product_name_norm or not candidate_name_norm:
+        return 0.0
+
+    similarity = _name_similarity_score(product.name or "", candidate_name)
+    score = similarity
+
+    if product_name_norm in candidate_name_norm or candidate_name_norm in product_name_norm:
+        score += 0.35
+
+    if _barcode_matches(product, dto):
+        score += 0.25
+
+    numeric_tokens = {
+        token
+        for token in _tokenize(product.name or "")
+        if any(ch.isdigit() for ch in token)
+    }
+    if numeric_tokens and numeric_tokens.intersection(_tokenize(candidate_name)):
+        score += 0.15
+
+    return score
+
+
+def _dto_matches_product(product: models.Product, dto: CompetitorPriceDTO) -> bool:
+    return _dto_match_score(product, dto) >= 0.45
+
+
+def _pick_best_dto(product: models.Product, dtos: List[CompetitorPriceDTO]) -> Optional[CompetitorPriceDTO]:
+    matched = [dto for dto in dtos if _dto_matches_product(product, dto)]
+    if not matched:
+        return None
+
+    return max(matched, key=lambda dto: _dto_match_score(product, dto))
+
+
+def _raw_payload_summary(raw_payload: Dict[str, Any]) -> Dict[str, Any]:
+    payload = raw_payload or {}
+    return {
+        "keys": list(payload.keys())[:12],
+        "title": payload.get("title") or payload.get("name"),
+        "price": payload.get("price") or payload.get("current_price"),
+        "url": payload.get("url"),
+        "seller": payload.get("shop_name") or payload.get("sellerName"),
+    }
 
 
 def _to_price_record(
@@ -116,7 +198,11 @@ def _fallback_price(product_guardian_price: float, competitor_name: str, barcode
 
 def _fetch_raw_items(competitor_name: str, target_url: str) -> List[Dict[str, Any]]:
     actor_id = get_actor_id_for_platform(_platform_key(competitor_name))
-    raw_items = ApifyClientService().run_scraper(actor_id=actor_id, target_url=target_url)
+    raw_items = ApifyClientService().run_scraper(
+        actor_id=actor_id,
+        target_url=target_url,
+        platform_key=_platform_key(competitor_name),
+    )
     if raw_items is None:
         return []
     if isinstance(raw_items, list):
@@ -139,11 +225,22 @@ async def _scrape_platform(
     if raw_items:
         scraper = ScraperFactory.get_scraper(_platform_key(competitor_name))
         dtos = scraper.parse_to_dto(raw_items, barcode=product.barcode)
-        if dtos:
+        best_dto = _pick_best_dto(product, dtos)
+        if best_dto:
             price_data = _to_price_record(
                 competitor_name=competitor_name,
-                dto=dtos[0],
+                dto=best_dto,
                 fallback_url=link.url if link else None,
+            )
+        elif dtos:
+            logger.warning(
+                "Rejected scraper payload due to product mismatch",
+                extra={
+                    "product_id": product.id,
+                    "barcode": product.barcode,
+                    "competitor": competitor_name,
+                    "candidate_names": [dto.product_name for dto in dtos[:3]],
+                },
             )
 
     if not price_data:
@@ -163,11 +260,23 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         return []
 
     new_prices = []
+    pre_upsert_samples: list[dict] = []
 
     for competitor in COMPETITORS:
         price_data = await _scrape_platform(db, product, competitor)
         if not price_data:
             continue
+
+        if len(pre_upsert_samples) < 3:
+            pre_upsert_samples.append(
+                {
+                    "product_id": product.id,
+                    "barcode": product.barcode,
+                    "competitor_name": competitor,
+                    "net_price": price_data["net_price"],
+                    "raw_payload": _raw_payload_summary(price_data.get("raw_payload") or {}),
+                }
+            )
 
         price_record = models.CompetitorPrice(
             product_id=product.id,
@@ -185,6 +294,12 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         )
         db.add(price_record)
         new_prices.append(price_record)
+
+    if pre_upsert_samples:
+        logger.info(
+            "Pre-upsert competitor payloads: %s",
+            json.dumps(pre_upsert_samples, ensure_ascii=False),
+        )
 
     db.commit()
     calculate_cpi_for_product(db, product.id)

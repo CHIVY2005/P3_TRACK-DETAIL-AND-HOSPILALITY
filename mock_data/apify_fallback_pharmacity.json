@@ -1,0 +1,67 @@
+[
+  {
+    "platform": "pharmacity",
+    "barcode": "7612345678901",
+    "title": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "product_name": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "current_price": "389.000 d/Chai",
+    "original_price": "420.000 d",
+    "shop_name": "Pharmacity",
+    "stock_status": "Con hang",
+    "promotion": "Mua 1 tang 1 tui mini",
+    "hierarchy": "Cham soc da mat > Sua rua mat > Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "url": "https://www.pharmacity.vn/cetaphil-gentle-skin-cleanser-500ml.html"
+  },
+  {
+    "platform": "pharmacity",
+    "barcode": "3337875549431",
+    "title": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "product_name": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "current_price": "501.500 d/Tuyp",
+    "original_price": "550.000 d",
+    "shop_name": "Pharmacity",
+    "stock_status": "Con hang",
+    "promotion": "Tang mat na duong am",
+    "hierarchy": "Cham soc da mat > Chong nang > Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "url": "https://www.pharmacity.vn/kem-chong-nang-la-roche-posay-anthelios-uvmune-400-fluid-50ml.html"
+  },
+  {
+    "platform": "pharmacity",
+    "barcode": "8934839123456",
+    "title": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "product_name": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "current_price": "129.000 d/Chai",
+    "original_price": "135.000 d",
+    "shop_name": "Pharmacity",
+    "stock_status": "Con hang",
+    "promotion": "Mua 2 giam them 5%",
+    "hierarchy": "Cham soc co the > Sua tam > Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "url": "https://www.pharmacity.vn/sua-tam-dove-duong-chat-tham-sau-duong-am-chuyen-sau-500g.html"
+  },
+  {
+    "platform": "pharmacity",
+    "barcode": "4901872054238",
+    "title": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "product_name": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "current_price": "681.000 d/Chai",
+    "original_price": "699.000 d",
+    "shop_name": "Pharmacity",
+    "stock_status": "Con hang",
+    "promotion": "Voucher 15k",
+    "hierarchy": "Cham soc da mat > Chong nang > Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "url": "https://www.pharmacity.vn/anessa-perfect-uv-sunscreen-skincare-milk-60ml.html"
+  },
+  {
+    "platform": "pharmacity",
+    "barcode": "6923456781234",
+    "title": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "product_name": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "current_price": "183.000 d/Chai",
+    "original_price": "189.000 d",
+    "shop_name": "Pharmacity",
+    "stock_status": "Con hang",
+    "promotion": "Mua 2 giam 10k",
+    "hierarchy": "Cham soc toc > Dau goi > Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "url": "https://www.pharmacity.vn/loreal-paris-elseve-fall-resist-3x-650ml.html"
+  }
+]

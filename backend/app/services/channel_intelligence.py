@@ -11,8 +11,6 @@ from app.db import models
 MONITORED_CHANNELS = (
     "Shopee",
     "Lazada",
-    "TikTok Shop",
-    "GrabMart",
     "Pharmacity",
     "Hasaki",
 )

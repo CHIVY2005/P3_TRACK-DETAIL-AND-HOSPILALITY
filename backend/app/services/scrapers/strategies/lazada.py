@@ -18,6 +18,7 @@ Lazada Apify actor shape:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List
 
 from app.services.scrapers.base import BaseScraper, CompetitorPriceDTO, clean_price_string
@@ -52,7 +53,7 @@ class LazadaScraper(BaseScraper):
 
     @staticmethod
     def _parse_single(item: Dict[str, Any], barcode: str) -> CompetitorPriceDTO | None:
-        product_name = item.get("name") or item.get("title") or ""
+        product_name = item.get("name") or item.get("title") or item.get("product_name") or ""
         if not product_name:
             return None
 
@@ -71,6 +72,9 @@ class LazadaScraper(BaseScraper):
         discount = item.get("discount") or item.get("discount_pct")
         promotion_info = str(discount) if discount else None
 
+        raw_payload = dict(item)
+        raw_payload["url"] = raw_payload.get("url") or LazadaScraper._build_product_url(item)
+
         return CompetitorPriceDTO(
             barcode=barcode,
             platform=PLATFORM,
@@ -79,8 +83,28 @@ class LazadaScraper(BaseScraper):
             competitor_price=price,
             is_in_stock=is_in_stock,
             promotion_info=promotion_info,
-            raw_payload=item,
+            raw_payload=raw_payload,
         )
+
+    @staticmethod
+    def _build_product_url(item: Dict[str, Any]) -> str | None:
+        raw_url = str(item.get("url") or "").strip()
+        if raw_url:
+            return raw_url
+
+        item_id = str(item.get("itemId") or item.get("item_id") or "").strip()
+        sku_id = str(item.get("skuId") or item.get("sku_id") or item.get("sellerSku") or "").strip()
+
+        item_match = re.search(r"i(\d+)", item_id)
+        sku_match = re.search(r"s(\d+)", sku_id)
+        normalized_item_id = item_match.group(1) if item_match else item_id if item_id.isdigit() else ""
+        normalized_sku_id = sku_match.group(1) if sku_match else sku_id if sku_id.isdigit() else ""
+
+        if normalized_item_id and normalized_sku_id:
+            return f"https://www.lazada.vn/products/pdp-i{normalized_item_id}-s{normalized_sku_id}.html"
+        if normalized_item_id:
+            return f"https://www.lazada.vn/products/i{normalized_item_id}.html"
+        return None
 
     def clean_data(self, raw_payload: Dict[str, Any]) -> Dict[str, Any]:
         return raw_payload

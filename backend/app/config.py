@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     SCRAPER_PROVIDER: str = "apify"
     APIFY_API_TOKEN: str | None = None
     APIFY_ACTOR_SHOPEE: str = "xtracto/shopee-scraper"
-    APIFY_ACTOR_LAZADA: str = "xtracto/lazada-scraper"
+    APIFY_ACTOR_LAZADA: str = "piotrv1001/lazada-listings-scraper"
     APIFY_ACTOR_TIKTOK: str = "xtracto/tiktok-scraper"
     APIFY_ACTOR_GRABMART: str = "tanduy.work/garbmart-scarper"
     APIFY_ACTOR_HASAKI: str = "tanduy.work/hasaki-scraper"

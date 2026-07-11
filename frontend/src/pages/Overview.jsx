@@ -66,7 +66,9 @@ function Overview() {
   const handleTriggerScrape = async () => {
     try {
       setTriggeringScrape(true)
-      await axios.post(`${API_BASE_URL}/scraper/trigger`, {})
+      await axios.post(`${API_BASE_URL}/scraper/trigger`, {
+        load_default_catalog: true,
+      })
       fetchData()
     } catch (err) {
       alert('Unable to trigger competitor scan.')
@@ -116,7 +118,7 @@ function Overview() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Workflow size={14} />
-            <span>Top 200 SKU / 6 channels / daily autonomous cycle</span>
+            <span>Guardian master SKU / 4 channels / Apify query cycle</span>
           </div>
           <h1>Guardian Pricing Intelligence</h1>
           <p>
@@ -128,7 +130,7 @@ function Overview() {
         <div className="hero-actions">
           <button className="btn btn-secondary" onClick={handleTriggerScrape} disabled={triggeringScrape}>
             <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-            {triggeringScrape ? 'Scanning channels...' : 'Refresh channels'}
+            {triggeringScrape ? 'Querying Apify...' : 'Query market data'}
           </button>
           <button className="btn btn-accent" onClick={handleRunAgent} disabled={triggeringAgent}>
             <Cpu size={16} className={triggeringAgent ? 'pulse' : ''} />

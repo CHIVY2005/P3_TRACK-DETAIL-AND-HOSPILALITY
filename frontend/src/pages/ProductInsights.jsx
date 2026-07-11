@@ -243,8 +243,7 @@ function ProductInsights() {
                       <Line type="monotone" dataKey="Guardian" stroke="var(--accent-strong)" strokeWidth={3} activeDot={{ r: 7 }} />
                       <Line type="monotone" dataKey="Shopee" stroke="#ee6c4d" strokeWidth={1.5} dot={{ r: 3 }} />
                       <Line type="monotone" dataKey="Lazada" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="TikTok Shop" stroke="#111827" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="GrabMart" stroke="#0f9f72" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Pharmacity" stroke="#0f9f72" strokeWidth={1.5} dot={{ r: 3 }} />
                       <Line type="monotone" dataKey="Hasaki" stroke="#d97706" strokeWidth={1.5} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>

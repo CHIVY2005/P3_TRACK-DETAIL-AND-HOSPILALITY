@@ -1,0 +1,62 @@
+[
+  {
+    "platform": "hasaki",
+    "barcode": "7612345678901",
+    "title": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "product_name": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "current_price": "385.000 d",
+    "original_price": "420.000 d",
+    "shop_name": "Hasaki",
+    "stock_status": "Con hang",
+    "promotion": "Mua 2 giam 5%",
+    "url": "https://hasaki.vn/san-pham/sua-rua-mat-cetaphil-gentle-skin-cleanser-500ml-120001.html"
+  },
+  {
+    "platform": "hasaki",
+    "barcode": "3337875549431",
+    "title": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "product_name": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "current_price": "492.000 d",
+    "original_price": "550.000 d",
+    "shop_name": "Hasaki",
+    "stock_status": "Con hang",
+    "promotion": "Tang sample mini",
+    "url": "https://hasaki.vn/san-pham/kem-chong-nang-la-roche-posay-anthelios-uvmune-400-fluid-50ml-183033.html"
+  },
+  {
+    "platform": "hasaki",
+    "barcode": "8934839123456",
+    "title": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "product_name": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "current_price": "132.000 d",
+    "original_price": "145.000 d",
+    "shop_name": "Hasaki",
+    "stock_status": "Con hang",
+    "promotion": "Mua 2 tang 1 tui refill",
+    "url": "https://hasaki.vn/san-pham/sua-tam-dove-duong-chat-tham-sau-duong-am-chuyen-sau-500g-183034.html"
+  },
+  {
+    "platform": "hasaki",
+    "barcode": "4901872054238",
+    "title": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "product_name": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "current_price": "675.000 d",
+    "original_price": "699.000 d",
+    "shop_name": "Hasaki",
+    "stock_status": "Con hang",
+    "promotion": "Voucher 20k",
+    "url": "https://hasaki.vn/san-pham/sua-chong-nang-anessa-perfect-uv-sunscreen-skincare-milk-60ml-183035.html"
+  },
+  {
+    "platform": "hasaki",
+    "barcode": "6923456781234",
+    "title": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "product_name": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "current_price": "169.000 d",
+    "original_price": "189.000 d",
+    "shop_name": "Hasaki",
+    "stock_status": "Con hang",
+    "promotion": "Mua 2 tang 1 dau xa",
+    "url": "https://hasaki.vn/san-pham/dau-goi-loreal-paris-elseve-fall-resist-3x-650ml-183036.html"
+  }
+]

@@ -2,16 +2,19 @@ from fastapi import APIRouter, Depends, BackgroundTasks, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
+from pathlib import Path
 from app.db.session import get_db
 from app.db import models
 from app.scraper.scraper_engine import COMPETITORS, run_scraper_for_all_products, scrape_realtime_competitor_prices
 from app import schemas
+from app.services.data_ingestion import import_dataset_from_path
 from app.services.scraped_samples import load_branch_scrape_samples
 
 router = APIRouter()
 
 class ScrapeTriggerRequest(BaseModel):
     product_id: Optional[int] = None
+    load_default_catalog: bool = False
 
 # In-memory status for simplified hackathon boilerplate
 scraper_status = {
@@ -70,6 +73,14 @@ def trigger_scrape(
         }
     )
 
+    try:
+        if payload.load_default_catalog:
+            dataset_path = Path(__file__).resolve().parents[3] / "mock_data" / "guardian_master_sku.csv"
+            import_dataset_from_path(db, str(dataset_path))
+    except Exception:
+        scraper_status["is_running"] = False
+        raise
+
     # We pass a new DB session for background tasks to avoid session sharing issues
     from app.db.session import SessionLocal
     bg_db = SessionLocal()
@@ -79,7 +90,8 @@ def trigger_scrape(
     return {
         "status": "triggered",
         "message": "Scraping pipeline triggered in background.",
-        "product_id": payload.product_id
+        "product_id": payload.product_id,
+        "catalog_source": "mock_data/guardian_master_sku.csv" if payload.load_default_catalog else None,
     }
 
 @router.get("/status")

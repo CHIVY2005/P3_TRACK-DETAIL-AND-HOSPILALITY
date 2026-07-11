@@ -1,0 +1,72 @@
+[
+  {
+    "platform": "shopee",
+    "barcode": "7612345678901",
+    "title": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "product_name": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "shop_name": "Cetaphil Official Store",
+    "price": 379000,
+    "price_before_discount": 420000,
+    "discount_pct": 10,
+    "availability": "IN_STOCK",
+    "shop_id": 518445856,
+    "item_id": 12037424648,
+    "url": "https://shopee.vn/product/518445856/12037424648"
+  },
+  {
+    "platform": "shopee",
+    "barcode": "3337875549431",
+    "title": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "product_name": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "shop_name": "La Roche-Posay Official Store",
+    "price": 495000,
+    "price_before_discount": 550000,
+    "discount_pct": 10,
+    "availability": "IN_STOCK",
+    "shop_id": 37251700,
+    "item_id": 580590480,
+    "url": "https://shopee.vn/product/37251700/580590480"
+  },
+  {
+    "platform": "shopee",
+    "barcode": "8934839123456",
+    "title": "Sua Tam Dove Duong Am Chuyen Sau 500g",
+    "product_name": "Sua Tam Dove Duong Am Chuyen Sau 500g",
+    "shop_name": "Dove Official Store",
+    "price": 128000,
+    "price_before_discount": 145000,
+    "discount_pct": 12,
+    "availability": "IN_STOCK",
+    "shop_id": 220334455,
+    "item_id": 9988776655,
+    "url": "https://shopee.vn/product/220334455/9988776655"
+  },
+  {
+    "platform": "shopee",
+    "barcode": "4901872054238",
+    "title": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "product_name": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "shop_name": "Anessa Official Store",
+    "price": 669000,
+    "price_before_discount": 699000,
+    "discount_pct": 4,
+    "availability": "IN_STOCK",
+    "shop_id": 667788990,
+    "item_id": 3344556677,
+    "url": "https://shopee.vn/product/667788990/3344556677"
+  },
+  {
+    "platform": "shopee",
+    "barcode": "6923456781234",
+    "title": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "product_name": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "shop_name": "Loreal Paris Official Store",
+    "price": 178000,
+    "price_before_discount": 189000,
+    "discount_pct": 6,
+    "availability": "IN_STOCK",
+    "shop_id": 556677889,
+    "item_id": 1122334455,
+    "url": "https://shopee.vn/product/556677889/1122334455"
+  }
+]

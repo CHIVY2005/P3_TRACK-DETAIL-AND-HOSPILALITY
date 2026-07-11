@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any, Dict, List, Optional
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 from app.services.scrapers.base import BaseScraper, CompetitorPriceDTO, clean_price_string
 
@@ -72,6 +72,17 @@ def _extract_name_from_hierarchy(hierarchy: Any) -> Optional[str]:
     return None
 
 
+def _extract_name_from_source(source: str) -> Optional[str]:
+    if not source:
+        return None
+    decoded = unquote(source)
+    parsed = urlparse(decoded)
+    keyword = parse_qs(parsed.query).get("keyword", [None])[0]
+    if not keyword:
+        return None
+    return keyword.replace("+", " ").strip()
+
+
 class PharmacityScraper(BaseScraper):
     """Pharmacity strategy implementation."""
 
@@ -105,8 +116,10 @@ class PharmacityScraper(BaseScraper):
         product_name = (
             item.get("title")
             or item.get("name")
+            or item.get("product_name")
             or _extract_name_from_hierarchy(item.get("hierarchy"))
             or _extract_name_from_url(item.get("url"))
+            or _extract_name_from_source(item.get("source", ""))
         )
         if not product_name:
             return None
@@ -126,6 +139,9 @@ class PharmacityScraper(BaseScraper):
         if isinstance(promotion_info, list):
             promotion_info = "; ".join(str(p) for p in promotion_info)
 
+        raw_payload = dict(item)
+        raw_payload["url"] = raw_payload.get("url") or PharmacityScraper._build_product_url(item, product_name)
+
         return CompetitorPriceDTO(
             barcode=barcode,
             platform=PLATFORM,
@@ -134,8 +150,25 @@ class PharmacityScraper(BaseScraper):
             competitor_price=price,
             is_in_stock=is_in_stock,
             promotion_info=promotion_info,
-            raw_payload=item,
+            raw_payload=raw_payload,
         )
+
+    @staticmethod
+    def _build_product_url(item: Dict[str, Any], product_name: str) -> str | None:
+        raw_url = str(item.get("url") or "").strip()
+        if raw_url:
+            return raw_url
+
+        source = str(item.get("source") or "").strip()
+        if source:
+            decoded = unquote(source)
+            if decoded.startswith("/"):
+                return f"https://www.pharmacity.vn{decoded}"
+
+        slug = re.sub(r"[^a-z0-9]+", "-", unquote(product_name).lower()).strip("-")
+        if not slug:
+            return None
+        return f"https://www.pharmacity.vn/{slug}.html"
 
     # ---------- legacy compat ----------
     def clean_data(self, raw_payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -23,6 +23,7 @@ The Shopee Apify actor stores prices as `price / 100_000` to get VND.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List
 
 from app.services.scrapers.base import BaseScraper, CompetitorPriceDTO, clean_price_string
@@ -87,6 +88,9 @@ class ShopeeScraper(BaseScraper):
         discount = item.get("discount_pct") or item.get("discount")
         promotion_info = f"Giảm {discount}%" if discount else None
 
+        raw_payload = dict(item)
+        raw_payload["url"] = raw_payload.get("url") or ShopeeScraper._build_product_url(item)
+
         return CompetitorPriceDTO(
             barcode=barcode,
             platform=PLATFORM,
@@ -95,8 +99,24 @@ class ShopeeScraper(BaseScraper):
             competitor_price=price,
             is_in_stock=is_in_stock,
             promotion_info=promotion_info,
-            raw_payload=item,
+            raw_payload=raw_payload,
         )
+
+    @staticmethod
+    def _build_product_url(item: Dict[str, Any]) -> str | None:
+        breadcrumbs = item.get("breadcrumb") or []
+        if isinstance(breadcrumbs, list):
+            for crumb in reversed(breadcrumbs):
+                if isinstance(crumb, dict):
+                    url = str(crumb.get("url") or "").strip()
+                    if "shopee.vn" in url and re.search(r"-i\.\d+\.\d+", url):
+                        return url
+
+        shop_id = item.get("shop_id") or item.get("shopid")
+        item_id = item.get("item_id") or item.get("itemid")
+        if shop_id and item_id:
+            return f"https://shopee.vn/product/{shop_id}/{item_id}"
+        return None
 
     # ---------- legacy compat ----------
     def clean_data(self, raw_payload: Dict[str, Any]) -> Dict[str, Any]:

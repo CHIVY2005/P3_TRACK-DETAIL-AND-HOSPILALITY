@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,19 @@ PLATFORM_URL_FIELDS = {
 
 def import_dataset_from_upload(db: Session, filename: str, raw_content: bytes) -> Dict[str, Any]:
     records = _load_records(filename, raw_content)
+    return _import_dataset_records(db, records, filename)
+
+
+def import_dataset_from_path(db: Session, dataset_path: str) -> Dict[str, Any]:
+    path = Path(dataset_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+
+    records = _load_records(path.name, path.read_bytes())
+    return _import_dataset_records(db, records, path.name) | {"source_path": str(path)}
+
+
+def _import_dataset_records(db: Session, records: List[Dict[str, Any]], filename: str) -> Dict[str, Any]:
     normalized = [_normalize_record(record) for record in records]
     valid_rows = []
     validation_errors = []

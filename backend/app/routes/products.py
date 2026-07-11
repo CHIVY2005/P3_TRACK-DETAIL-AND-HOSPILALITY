@@ -1,4 +1,5 @@
 from typing import List, Optional
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ from app import schemas
 from app.db import models
 from app.db.session import get_db
 from app.services.cpi_calculator import calculate_cpi_for_product
-from app.services.data_ingestion import import_dataset_from_upload
+from app.services.data_ingestion import import_dataset_from_path, import_dataset_from_upload
 from app.services.demo_seed import seed_demo_dataset
 
 router = APIRouter()
@@ -120,6 +121,36 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
 @router.post("/import-dataset", status_code=status.HTTP_201_CREATED)
 def import_products_dataset(file: UploadFile = File(...), db: Session = Depends(get_db)):
     return import_products_csv(file, db)
+
+
+@router.post("/load-default-catalog", status_code=status.HTTP_201_CREATED)
+def load_default_catalog(db: Session = Depends(get_db)):
+    dataset_path = Path(__file__).resolve().parents[3] / "mock_data" / "guardian_master_sku.csv"
+    try:
+        result = import_dataset_from_path(db, str(dataset_path))
+        return result | {
+            "message": (
+                f"Loaded {result['imported']} Guardian master SKUs from {dataset_path.name}. "
+                "Catalog is ready for live Apify scraping."
+            )
+        }
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load default catalog: {exc}",
+        )
 
 
 @router.post("/seed-demo", status_code=status.HTTP_201_CREATED)

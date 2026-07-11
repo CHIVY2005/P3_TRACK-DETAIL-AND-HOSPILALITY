@@ -1,0 +1,72 @@
+[
+  {
+    "platform": "lazada",
+    "barcode": "7612345678901",
+    "name": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "product_name": "Sua Rua Mat Cetaphil Gentle Skin Cleanser 500ml",
+    "price": 381000,
+    "originalPrice": 420000,
+    "sellerName": "Cetaphil LazMall",
+    "inStock": true,
+    "discount": "-9%",
+    "itemId": "i455667788",
+    "skuId": "s9911223344",
+    "url": "https://www.lazada.vn/products/pdp-i455667788-s9911223344.html"
+  },
+  {
+    "platform": "lazada",
+    "barcode": "3337875549431",
+    "name": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "product_name": "Kem Chong Nang La Roche-Posay Anthelios UVmune 400 Fluid 50ml",
+    "price": 489000,
+    "originalPrice": 550000,
+    "sellerName": "La Roche-Posay Official Store",
+    "inStock": true,
+    "discount": "-11%",
+    "itemId": "i255675772",
+    "skuId": "s14883705485",
+    "url": "https://www.lazada.vn/products/pdp-i255675772-s14883705485.html"
+  },
+  {
+    "platform": "lazada",
+    "barcode": "8934839123456",
+    "name": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "product_name": "Sua Tam Dove Duong Chat Tham Sau Duong Am Chuyen Sau 500g",
+    "price": 131000,
+    "originalPrice": 145000,
+    "sellerName": "Dove Official Store",
+    "inStock": true,
+    "discount": "-10%",
+    "itemId": "i466778899",
+    "skuId": "s4455667788",
+    "url": "https://www.lazada.vn/products/pdp-i466778899-s4455667788.html"
+  },
+  {
+    "platform": "lazada",
+    "barcode": "4901872054238",
+    "name": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "product_name": "Sua Chong Nang Anessa Perfect UV Sunscreen Skincare Milk 60ml",
+    "price": 659000,
+    "originalPrice": 689000,
+    "sellerName": "Anessa Official Store",
+    "inStock": true,
+    "discount": "-4%",
+    "itemId": "i987654321",
+    "skuId": "s1234567890",
+    "url": "https://www.lazada.vn/products/pdp-i987654321-s1234567890.html"
+  },
+  {
+    "platform": "lazada",
+    "barcode": "6923456781234",
+    "name": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "product_name": "Dau Goi Loreal Paris Elseve Fall Resist 3X 650ml",
+    "price": 176000,
+    "originalPrice": 189000,
+    "sellerName": "Loreal Paris Official Store",
+    "inStock": true,
+    "discount": "-7%",
+    "itemId": "i577889900",
+    "skuId": "s9988776655",
+    "url": "https://www.lazada.vn/products/pdp-i577889900-s9988776655.html"
+  }
+]
