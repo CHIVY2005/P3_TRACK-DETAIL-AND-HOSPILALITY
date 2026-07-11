@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Database engine selection
     USE_SQLITE: bool = True
 
+    # Full connection string (Neon/Supabase/etc). If set, overrides the fields below.
+    # Accepts either DATABASE_URL or the legacy DB_URL name used in .env.
+    DATABASE_URL: str = ""
+    DB_URL: str = ""
+
     # PostgreSQL Database Config
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
@@ -61,10 +66,24 @@ class Settings(BaseSettings):
 
     @property
     def sqlalchemy_database_uri(self) -> str:
+        # Hybrid switch: USE_SQLITE=True forces the fast local file (instant, for demos)
+        # even when a remote DB_URL is present. Set USE_SQLITE=False to use Supabase.
         if self.USE_SQLITE:
             backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             db_path = os.path.join(backend_dir, "guardian.db")
             return f"sqlite:///{db_path}"
+
+        # Otherwise a full connection string (Neon/Supabase) wins over the split fields.
+        full_url = self.DATABASE_URL or self.DB_URL
+        if full_url:
+            url = full_url.strip()
+            # SQLAlchemy needs the "postgresql://" scheme, not the legacy "postgres://".
+            if url.startswith("postgres://"):
+                url = "postgresql://" + url[len("postgres://"):]
+            # Managed Postgres requires SSL; add it if the URL doesn't mention it.
+            if url.startswith("postgresql://") and "sslmode=" not in url:
+                url += ("&" if "?" in url else "?") + "sslmode=require"
+            return url
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property

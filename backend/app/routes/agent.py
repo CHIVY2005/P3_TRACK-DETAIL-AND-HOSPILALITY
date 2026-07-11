@@ -11,10 +11,13 @@ from app.db import models
 from app.db.session import get_db
 from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_client
 from app.services.agent_engine import build_alert_decision_context
+from app.agents.market_observer.market_observer_agent import build_alert_decision_contexts
 from app.services.agent_runtime import create_agent_task, get_agent_runtime_status, is_agent_running, run_agent_task
 from app.services.channel_intelligence import build_channel_intelligence
+from app.agents.market_observer.market_observer_tools import get_latest_channel_observations
 from app.services.cpi_calculator import calculate_cpi_for_product
 from app.services.daily_scheduler import get_scheduler_status
+from app.services import response_cache
 
 router = APIRouter()
 
@@ -56,10 +59,22 @@ def trigger_agent_run(
 
 @router.get("/briefing", response_model=schemas.AgentBriefing)
 def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
+    cache_key = f"agent:briefing:{limit}"
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     active_alerts = db.query(models.Alert).filter(models.Alert.is_resolved == False).all()
+
+    # Preload the two heavy datasets once and share them across both consumers below
+    # (decision contexts + channel intelligence) so the windowed price query and the
+    # product scan each run a single time per request instead of twice.
+    products = db.query(models.Product).all()
+    products_by_id = {product.id: product for product in products}
+    observations = get_latest_channel_observations(db)
+
     decisions_by_product = {}
-    for alert in active_alerts:
-        context = build_alert_decision_context(db, alert)
+    for context in build_alert_decision_contexts(db, active_alerts, products_by_id, observations):
         if context.get("status") == "ready":
             existing = decisions_by_product.get(context["product_id"])
             if existing is None or _decision_sort_key(context) < _decision_sort_key(existing):
@@ -75,7 +90,7 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
         )
     )
 
-    channel_intelligence = build_channel_intelligence(db)
+    channel_intelligence = build_channel_intelligence(db, products, observations)
     channel_summary = [
         schemas.AgentBriefingChannel(
             channel=item["channel"],
@@ -95,12 +110,13 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
 
     latest_task = db.query(models.AgentTask).order_by(models.AgentTask.started_at.desc()).first()
     pending_actions = db.query(models.AgentAction).filter(models.AgentAction.status == "Pending").count()
-    monitored_sku = db.query(models.Product).count()
+    # Reuse the already-loaded datasets instead of issuing extra round-trips.
+    monitored_sku = len(products)
     average_cpi = db.query(func.avg(models.PricingIndex.competitor_index)).scalar() or 100.0
     high_alerts = sum(1 for alert in active_alerts if alert.severity == "High")
-    last_scrape_at = db.query(func.max(models.CompetitorPrice.scraped_at)).scalar()
+    last_scrape_at = max((row.scraped_at for row in observations if row.scraped_at), default=None)
 
-    return schemas.AgentBriefing(
+    result = schemas.AgentBriefing(
         summary=schemas.AgentBriefingSummary(
             monitored_sku=monitored_sku,
             active_alerts=len(active_alerts),
@@ -114,6 +130,8 @@ def get_agent_briefing(limit: int = 6, db: Session = Depends(get_db)):
         channel_summary=channel_summary,
         latest_task=latest_task,
     )
+    response_cache.set(cache_key, result)
+    return result
 
 
 @router.get("/tasks", response_model=List[schemas.AgentTask])
@@ -178,6 +196,7 @@ def approve_agent_action(action_id: int, db: Session = Depends(get_db)):
                 message = "Price action approved, applied, and CPI recalculated."
             else:
                 message = "Supplier action approved for commercial handoff."
+            response_cache.invalidate_all()
             return {"status": "success", "message": message}
 
         if client:
@@ -231,6 +250,7 @@ def reject_agent_action(action_id: int, db: Session = Depends(get_db)):
                 alert.is_resolved = True
 
             db.commit()
+            response_cache.invalidate_all()
             return {"status": "success", "message": "Action rejected and alert dismissed."}
 
         if client:

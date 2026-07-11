@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.db import models
 from app import schemas
 from app.services.channel_intelligence import build_channel_intelligence
+from app.services import response_cache
 
 router = APIRouter()
 
@@ -13,10 +14,14 @@ router = APIRouter()
 @router.get("/channel-index", response_model=schemas.ChannelIntelligence)
 def get_channel_index(db: Session = Depends(get_db)):
     """Return rubric-grade CPI, coverage, freshness, and promotion metrics per channel."""
-    return build_channel_intelligence(db)
+    return response_cache.cached("pricing:channel-index", lambda: build_channel_intelligence(db))
 
 @router.get("/overview", response_model=schemas.OverviewStats)
 def get_overview_stats(db: Session = Depends(get_db)):
+    cached = response_cache.get("pricing:overview")
+    if cached is not None:
+        return cached
+
     # 1. Fetch total products
     total_sku = db.query(models.Product).count()
     if total_sku == 0:
@@ -63,7 +68,7 @@ def get_overview_stats(db: Session = Depends(get_db)):
     for name, avg in comp_query:
         comp_prices[name] = round(avg, 2)
 
-    return schemas.OverviewStats(
+    result = schemas.OverviewStats(
         average_cpi=round(average_cpi, 2),
         total_sku=total_sku,
         underpriced_sku=underpriced_sku,
@@ -72,6 +77,8 @@ def get_overview_stats(db: Session = Depends(get_db)):
         category_distribution=cat_distribution,
         competitor_avg_prices=comp_prices
     )
+    response_cache.set("pricing:overview", result)
+    return result
 
 @router.get("/cpi-index", response_model=List[Dict[str, Any]])
 def get_cpi_index_table(db: Session = Depends(get_db)):
@@ -79,43 +86,39 @@ def get_cpi_index_table(db: Session = Depends(get_db)):
     Returns a combined list of products and their corresponding pricing indices and recommendations
     for display in the main dashboard grid.
     """
+    cached = response_cache.get("pricing:cpi-index")
+    if cached is not None:
+        return cached
+
+    from collections import defaultdict
+    from app.services.channel_intelligence import get_latest_channel_observations
+
     products = db.query(models.Product).all()
+
+    # Preload everything the loop needs in a handful of queries instead of ~3 per SKU.
+    index_by_product = {idx.product_id: idx for idx in db.query(models.PricingIndex).all()}
+
+    comp_by_product: Dict[int, Dict[str, Any]] = defaultdict(dict)
+    for cp in get_latest_channel_observations(db):
+        comp_by_product[cp.product_id][cp.competitor_name] = {
+            "net_price": cp.net_price,
+            "raw_price": cp.raw_price,
+            "discount": cp.discount,
+            "voucher_details": cp.voucher_details,
+            "promo_mechanics": cp.promo_mechanics,
+            "url": cp.url,
+        }
+
+    alert_counts = dict(
+        db.query(models.Alert.product_id, func.count(models.Alert.id))
+        .filter(models.Alert.is_resolved == False)
+        .group_by(models.Alert.product_id)
+        .all()
+    )
+
     result = []
-    
     for p in products:
-        # Get latest pricing index
-        idx = db.query(models.PricingIndex).filter(models.PricingIndex.product_id == p.id).first()
-        
-        # Get latest competitor prices
-        # First, find the max scraped date per competitor for this product
-        subq = db.query(
-            models.CompetitorPrice.competitor_name,
-            func.max(models.CompetitorPrice.scraped_at).label("max_scraped")
-        ).filter(models.CompetitorPrice.product_id == p.id).group_by(models.CompetitorPrice.competitor_name).subquery()
-        
-        comp_prices = db.query(models.CompetitorPrice).join(
-            subq,
-            (models.CompetitorPrice.competitor_name == subq.c.competitor_name) &
-            (models.CompetitorPrice.scraped_at == subq.c.max_scraped)
-        ).filter(models.CompetitorPrice.product_id == p.id).all()
-        
-        comp_data = {}
-        for cp in comp_prices:
-            comp_data[cp.competitor_name] = {
-                "net_price": cp.net_price,
-                "raw_price": cp.raw_price,
-                "discount": cp.discount,
-                "voucher_details": cp.voucher_details,
-                "promo_mechanics": cp.promo_mechanics,
-                "url": cp.url
-            }
-
-        # Calculate count of unresolved alerts
-        alert_count = db.query(models.Alert).filter(
-            models.Alert.product_id == p.id,
-            models.Alert.is_resolved == False
-        ).count()
-
+        idx = index_by_product.get(p.id)
         result.append({
             "id": p.id,
             "barcode": p.barcode,
@@ -126,11 +129,12 @@ def get_cpi_index_table(db: Session = Depends(get_db)):
             "competitor_index": idx.competitor_index if idx else 100.0,
             "average_competitor_price": idx.average_competitor_price if idx else p.guardian_price,
             "recommendation": idx.recommendation if idx else "Maintain Price",
-            "competitors": comp_data,
-            "active_alerts": alert_count,
+            "competitors": comp_by_product.get(p.id, {}),
+            "active_alerts": alert_counts.get(p.id, 0),
             "updated_at": idx.updated_at if idx else p.updated_at
         })
-        
+
     # Sort by active alerts (descending) and then competitor_index deviation from 100
     result.sort(key=lambda x: (x["active_alerts"], abs(100 - x["competitor_index"])), reverse=True)
+    response_cache.set("pricing:cpi-index", result)
     return result

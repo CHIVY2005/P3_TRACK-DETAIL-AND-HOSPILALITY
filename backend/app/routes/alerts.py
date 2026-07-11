@@ -5,6 +5,7 @@ from typing import List
 from app.db.session import get_db
 from app.db import models
 from app import schemas
+from app.services import response_cache
 
 router = APIRouter()
 
@@ -14,22 +15,29 @@ def list_alerts(
     severity: str = None,
     db: Session = Depends(get_db)
 ):
+    cache_key = f"alerts:{unresolved_only}:{severity}"
+    cached = response_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(models.Alert)
     if unresolved_only:
         query = query.filter(models.Alert.is_resolved == False)
     if severity:
         query = query.filter(models.Alert.severity == severity)
-        
+
     severity_order = case(
         (models.Alert.severity == "High", 0),
         (models.Alert.severity == "Medium", 1),
         (models.Alert.severity == "Low", 2),
         else_=3,
     )
-    return query.order_by(
+    result = query.order_by(
         severity_order,
         models.Alert.created_at.desc()
     ).all()
+    response_cache.set(cache_key, result)
+    return result
 
 @router.post("/{alert_id}/resolve", response_model=schemas.Alert)
 def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
@@ -42,4 +50,5 @@ def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
     alert.is_resolved = True
     db.commit()
     db.refresh(alert)
+    response_cache.invalidate_all()
     return alert

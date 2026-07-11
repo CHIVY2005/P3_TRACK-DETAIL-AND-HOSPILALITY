@@ -25,20 +25,24 @@ import {
   X,
 } from 'lucide-react'
 import { API_BASE_URL } from '../api.js'
+import { getCache, setCache } from '../dataCache.js'
 
 function Overview() {
-  const [stats, setStats] = useState(null)
-  const [alerts, setAlerts] = useState([])
-  const [briefing, setBriefing] = useState(null)
-  const [channelIntelligence, setChannelIntelligence] = useState(null)
-  const [recentActions, setRecentActions] = useState([])
-  const [loading, setLoading] = useState(true)
+  const cached = getCache('overview')
+  const [stats, setStats] = useState(cached?.stats ?? null)
+  const [alerts, setAlerts] = useState(cached?.alerts ?? [])
+  const [briefing, setBriefing] = useState(cached?.briefing ?? null)
+  const [channelIntelligence, setChannelIntelligence] = useState(cached?.channelIntelligence ?? null)
+  const [recentActions, setRecentActions] = useState(cached?.recentActions ?? [])
+  // Only show the full loading state on the very first visit; on later visits we
+  // render the cached data immediately and refresh silently in the background.
+  const [loading, setLoading] = useState(!cached)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
   const [triggeringAgent, setTriggeringAgent] = useState(false)
 
   const fetchData = async () => {
     try {
-      setLoading(true)
+      if (!getCache('overview')) setLoading(true)
       const [statsRes, alertsRes, briefingRes, actionsRes, channelRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/pricing/overview`),
         axios.get(`${API_BASE_URL}/alerts`),
@@ -47,11 +51,19 @@ function Overview() {
         axios.get(`${API_BASE_URL}/pricing/channel-index`),
       ])
 
-      setStats(statsRes.data)
-      setAlerts(alertsRes.data)
-      setBriefing(briefingRes.data)
-      setRecentActions(actionsRes.data)
-      setChannelIntelligence(channelRes.data)
+      const bundle = {
+        stats: statsRes.data,
+        alerts: alertsRes.data,
+        briefing: briefingRes.data,
+        recentActions: actionsRes.data,
+        channelIntelligence: channelRes.data,
+      }
+      setCache('overview', bundle)
+      setStats(bundle.stats)
+      setAlerts(bundle.alerts)
+      setBriefing(bundle.briefing)
+      setRecentActions(bundle.recentActions)
+      setChannelIntelligence(bundle.channelIntelligence)
     } catch (err) {
       console.error('Error fetching overview data', err)
     } finally {

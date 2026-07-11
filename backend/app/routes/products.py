@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.services.cpi_calculator import calculate_cpi_for_product
 from app.services.data_ingestion import import_dataset_from_upload
 from app.services.demo_seed import seed_demo_dataset
+from app.services import response_cache
 
 router = APIRouter()
 
@@ -97,6 +98,7 @@ def import_products_csv(file: UploadFile = File(...), db: Session = Depends(get_
     try:
         content = file.file.read()
         result = import_dataset_from_upload(db, file.filename or "", content)
+        response_cache.invalidate_all()
         return result | {
             "message": (
                 f"Imported {result['imported']} products and registered {result['competitor_links']} competitor links. "
@@ -126,6 +128,7 @@ def import_products_dataset(file: UploadFile = File(...), db: Session = Depends(
 def seed_demo_data(db: Session = Depends(get_db)):
     try:
         result = seed_demo_dataset(db)
+        response_cache.invalidate_all()
         return {
             "status": "success",
             "message": f"Loaded {result['products']} demo SKUs and {result['competitor_prices']} competitor price records.",

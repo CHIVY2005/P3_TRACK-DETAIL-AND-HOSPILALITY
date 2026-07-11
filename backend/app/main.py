@@ -5,6 +5,7 @@ from app.agents.shared.runtime_support import shutdown_langfuse
 from app.db.session import engine, Base
 from app.routes import products, pricing, alerts, scraper, agent, sync
 from app.services.daily_scheduler import start_daily_scheduler, stop_daily_scheduler
+from app.services.db_keepalive import start_db_keepalive, stop_db_keepalive
 
 # Create database tables automatically for the hackathon environment.
 # This ensures that once the user runs the project, the tables are auto-created.
@@ -39,11 +40,13 @@ app.include_router(sync.router, prefix="/api", tags=["Sync"])
 
 @app.on_event("startup")
 def on_startup():
+    start_db_keepalive()
     start_daily_scheduler()
 
 
 @app.on_event("shutdown")
 def on_shutdown():
+    stop_db_keepalive()
     stop_daily_scheduler()
     shutdown_langfuse()
 

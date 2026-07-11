@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { Bot, CheckCircle2, ExternalLink, Mail, Send, Terminal, XCircle } from 'lucide-react'
 import { API_BASE_URL } from '../api.js'
+import { getCache, setCache } from '../dataCache.js'
 
 function AgentWorkspace() {
-  const [tasks, setTasks] = useState([])
-  const [activeTask, setActiveTask] = useState(null)
-  const [actions, setActions] = useState([])
-  const [briefing, setBriefing] = useState(null)
-  const [runtimeStatus, setRuntimeStatus] = useState(null)
+  const cached = getCache('agentWorkspace')
+  const [tasks, setTasks] = useState(cached?.tasks ?? [])
+  const [activeTask, setActiveTask] = useState(cached?.activeTask ?? null)
+  const [actions, setActions] = useState(cached?.actions ?? [])
+  const [briefing, setBriefing] = useState(cached?.briefing ?? null)
+  const [runtimeStatus, setRuntimeStatus] = useState(cached?.runtimeStatus ?? null)
   const [running, setRunning] = useState(false)
   const [selectedAction, setSelectedAction] = useState(null)
   const [showEmailModal, setShowEmailModal] = useState(false)
@@ -28,6 +30,13 @@ function AgentWorkspace() {
       setActions(actionsRes.data)
       setBriefing(briefingRes.data)
       setRuntimeStatus(runtimeRes.data)
+      setCache('agentWorkspace', {
+        tasks: tasksRes.data,
+        actions: actionsRes.data,
+        briefing: briefingRes.data,
+        runtimeStatus: runtimeRes.data,
+        activeTask: tasksRes.data[0] ?? null,
+      })
 
       const active = tasksRes.data.find((task) => task.status === 'Running' || task.status === 'Pending')
       if (active) {
@@ -46,7 +55,7 @@ function AgentWorkspace() {
 
   useEffect(() => {
     fetchHistory()
-    const interval = setInterval(fetchHistory, 3000)
+    const interval = setInterval(fetchHistory, 8000)
     return () => clearInterval(interval)
   }, [])
 

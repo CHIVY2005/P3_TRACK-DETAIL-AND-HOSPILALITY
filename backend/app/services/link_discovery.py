@@ -9,8 +9,6 @@ from app.db import models
 SEARCH_URL_TEMPLATES = {
     "Shopee": "https://shopee.vn/search?keyword={query}",
     "Lazada": "https://www.lazada.vn/catalog/?q={query}",
-    "TikTok Shop": "https://www.tiktok.com/search?q={query}",
-    "GrabMart": "https://www.grab.com/vn/food/?q={query}",
     "Pharmacity": "https://www.pharmacity.vn/tim-kiem?q={query}",
     "Hasaki": "https://hasaki.vn/tim-kiem?q={query}",
 }

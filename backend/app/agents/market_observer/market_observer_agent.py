@@ -1,10 +1,16 @@
-from typing import Any, Dict
+from collections import defaultdict
+from typing import Any, Dict, List
 
 from sqlalchemy.orm import Session
 
 from app.config import get_agent_config
 from app.db import models
-from app.agents.market_observer.market_observer_tools import get_alert_reference_price
+from app.agents.market_observer.market_observer_tools import (
+    get_alert_reference_price,
+    get_latest_channel_observations,
+    is_clean_price,
+    select_reference_price,
+)
 
 
 def build_alert_decision_context(db: Session, alert: models.Alert) -> Dict[str, Any]:
@@ -16,7 +22,57 @@ def build_alert_decision_context(db: Session, alert: models.Alert) -> Dict[str, 
     if not latest_price:
         return {"status": "skipped", "reason": "missing_competitor_price"}
 
+    return _build_context(alert, product, latest_price, get_agent_config())
+
+
+def build_alert_decision_contexts(
+    db: Session,
+    alerts: List[models.Alert],
+    products_by_id: Dict[int, models.Product] = None,
+    observations: List[models.CompetitorPrice] = None,
+) -> List[Dict[str, Any]]:
+    """Batched equivalent of build_alert_decision_context that avoids N+1 queries.
+
+    Instead of one product lookup + one windowed price query per alert, it preloads
+    every product and the latest clean price for each product/channel pair once, then
+    resolves each alert in memory. Turns ~2*len(alerts) round-trips into 3 queries.
+
+    ``products_by_id`` and ``observations`` may be passed in when the caller already
+    loaded them (e.g. the briefing route also feeds channel intelligence) so the two
+    heavy queries run only once per request.
+    """
+    if not alerts:
+        return []
+
+    if products_by_id is None:
+        products_by_id = {product.id: product for product in db.query(models.Product).all()}
+    if observations is None:
+        observations = get_latest_channel_observations(db)
+
+    clean_prices_by_product: Dict[int, list] = defaultdict(list)
+    for row in observations:
+        if is_clean_price(row):
+            clean_prices_by_product[row.product_id].append(row)
+
     cfg = get_agent_config()
+
+    contexts = []
+    for alert in alerts:
+        product = products_by_id.get(alert.product_id)
+        if not product:
+            contexts.append({"status": "skipped", "reason": "missing_product"})
+            continue
+        latest_price = select_reference_price(
+            clean_prices_by_product.get(product.id, []), product, alert.alert_type
+        )
+        if not latest_price:
+            contexts.append({"status": "skipped", "reason": "missing_competitor_price"})
+            continue
+        contexts.append(_build_context(alert, product, latest_price, cfg))
+    return contexts
+
+
+def _build_context(alert, product, latest_price, cfg) -> Dict[str, Any]:
     min_margin_pct = cfg.get("min_margin", 0.15) * 100.0
     current_margin_pct = ((product.guardian_price - product.cost_price) / product.guardian_price) * 100 if product.guardian_price else 0.0
     margin_if_matched_pct = ((latest_price.net_price - product.cost_price) / latest_price.net_price) * 100 if latest_price.net_price else 0.0

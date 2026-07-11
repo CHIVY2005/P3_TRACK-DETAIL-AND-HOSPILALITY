@@ -11,25 +11,23 @@ def refresh_market_prices(db: Session) -> Dict[int, list]:
     return run_scraper_for_all_products(db)
 
 
-def get_latest_clean_competitor_prices(db: Session, product_id: int):
-    observations = get_latest_channel_observations(db, product_id=product_id)
-    return [
-        row
-        for row in observations
-        if row.net_price is not None
+def is_clean_price(row: models.CompetitorPrice) -> bool:
+    """Pure predicate: is this observation usable as a market reference?"""
+    return bool(
+        row.net_price is not None
         and row.net_price > 0
         and not row.is_suspicious
         and (row.stock_status or "").replace("_", "").upper() not in {"OUTOFSTOCK", "OOS", "UNAVAILABLE"}
-    ]
+    )
 
 
-def get_alert_reference_price(
-    db: Session,
-    product: models.Product,
-    alert_type: str,
-):
-    """Pick the most decision-relevant clean latest price, not an arbitrary last row."""
-    prices = get_latest_clean_competitor_prices(db, product.id)
+def get_latest_clean_competitor_prices(db: Session, product_id: int):
+    observations = get_latest_channel_observations(db, product_id=product_id)
+    return [row for row in observations if is_clean_price(row)]
+
+
+def select_reference_price(prices, product: models.Product, alert_type: str):
+    """Pure selection: pick the most decision-relevant price from an already-clean list."""
     if not prices:
         return None
 
@@ -40,6 +38,16 @@ def get_alert_reference_price(
         return max(prices, key=lambda row: (row.net_price, row.competitor_name))
 
     return min(prices, key=lambda row: (row.net_price, row.competitor_name))
+
+
+def get_alert_reference_price(
+    db: Session,
+    product: models.Product,
+    alert_type: str,
+):
+    """Pick the most decision-relevant clean latest price, not an arbitrary last row."""
+    prices = get_latest_clean_competitor_prices(db, product.id)
+    return select_reference_price(prices, product, alert_type)
 
 
 def get_latest_clean_competitor_price(db: Session, product_id: int):

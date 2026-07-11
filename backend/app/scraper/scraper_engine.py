@@ -1,7 +1,8 @@
 import os
+import re
 import random
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.db import models
 from app.config import settings
@@ -10,86 +11,290 @@ from app.services.link_discovery import ensure_competitor_link
 from app.services.platform_mappers import map_marketplace_result
 
 # List of competitor channels
-COMPETITORS = ["Shopee", "Lazada", "TikTok Shop", "GrabMart", "Pharmacity", "Hasaki"]
+# GrabMart is a grocery-delivery service, not a cosmetics/pharma price channel in VN, so
+# it is intentionally excluded from the tracked competitor set.
+COMPETITORS = ["Shopee", "Lazada", "Pharmacity", "Hasaki"]
+
+# Real scrapers fail often on bot-protected search URLs, so keep timeouts short and
+# fall back to the simulator quickly instead of blocking the pipeline for a minute.
+SCRAPE_TIMEOUT_MS = 8000        # Playwright / Crawl4AI page load budget
+APIFY_TIMEOUT_SECS = 60         # Apify actor run budget (abotapi Lazada ~34s, Shopee faster)
+BRIGHTDATA_TIMEOUT_SECS = 55    # Bright Data Web Unlocker request budget (JS render is slow)
+# Safety ceiling per run. Must sit ABOVE this actor's real ~$0.20/run charge, otherwise
+# the platform aborts the run right as it finishes and the result is lost.
+APIFY_MAX_CHARGE_USD = float(os.getenv("APIFY_MAX_CHARGE_USD", "0.30"))
+# How many SKUs to scrape in parallel. Each SKU already fans out to several channels
+# concurrently, and real scrapers (Apify/Bright Data) are slow + rate-limited, so keep
+# this low or 5 SKUs x 3 channels = 15 concurrent calls overwhelm the pool and time out
+# into the simulator. Tune via the SCRAPER_PRODUCT_CONCURRENCY env var.
+PRODUCT_CONCURRENCY = int(os.getenv("SCRAPER_PRODUCT_CONCURRENCY", "3"))
+
+# Real Apify actors per marketplace (Store actor id + a builder for their input schema).
+# Each actor has its own input shape; the raw output item is handed to
+# map_marketplace_result which already understands the common price fields.
+APIFY_MARKET_COUNTRY = os.getenv("APIFY_MARKET_COUNTRY", "vn")
+
+
+def _shopee_xtracto_input(search_target: str) -> dict:
+    # Schema: xtracto/shopee-scraper (mode=keyword). country supports 'vn'.
+    return {
+        "mode": "keyword",
+        "keyword": search_target,
+        "country": APIFY_MARKET_COUNTRY,
+        "sort": "relevancy",
+        "maxProducts": 1,
+    }
+
+
+def _lazada_abotapi_input(search_target: str) -> dict:
+    # Schema: abotapi/lazada-scraper (mode=search). Faster (~34s) than fatihtahta and
+    # returns flat, numeric VND fields. country supports 'vn'.
+    return {
+        "mode": "search",
+        "country": APIFY_MARKET_COUNTRY,
+        "queries": [search_target],
+        "sortBy": "popularity",
+    }
+
+
+def _normalize_passthrough(item: dict) -> dict:
+    # xtracto/shopee-scraper is already flat (name/price/original_price/url).
+    return item
+
+
+def _normalize_lazada_abotapi(item: dict) -> dict:
+    # abotapi/lazada-scraper: flat fields, prices already numeric in VND.
+    return {
+        "name": item.get("productName") or item.get("name"),
+        "url": item.get("productUrl") or item.get("url"),
+        "price": item.get("currentPrice"),
+        "original_price": item.get("originalPrice"),
+        "availability": "InStock" if item.get("inStock") else "OutOfStock",
+    }
+
+
+# competitor -> (actor id, input builder, output normalizer to the shared price shape)
+APIFY_ACTORS = {
+    "Shopee": ("xtracto/shopee-scraper", _shopee_xtracto_input, _normalize_passthrough),
+    "Lazada": ("abotapi/lazada-scraper", _lazada_abotapi_input, _normalize_lazada_abotapi),
+    # TikTok Shop: available actors return USD prices -> unsafe for VND CPI (not wired).
+}
+
+
+def apify_enabled() -> bool:
+    """Real Apify calls cost money (~$0.20/SKU), so they are OFF unless explicitly
+    enabled. Without this, one bulk refresh of 200 SKUs could burn ~$40 of credit."""
+    return os.getenv("APIFY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+
 
 async def scrape_via_apify(search_target: str, competitor_name: str) -> dict:
     """
-    Integrates Apify API using the user's Apify platform credits.
-    Triggers a marketplace search actor on Shopee or Lazada to find live pricing.
+    Integrates Apify using the user's platform credits. Runs the configured marketplace
+    actor for a keyword search and returns the first raw item (mapped downstream by
+    map_marketplace_result). Returns None on any miss so the pipeline falls back.
     """
+    if not apify_enabled():
+        return None
+
     token = os.getenv("APIFY_API_TOKEN", "")
     if not token or "your_apify" in token:
-        # No key available, return None to trigger fallback
         return None
+
+    actor = APIFY_ACTORS.get(competitor_name)
+    if not actor:
+        # No real actor wired for this marketplace yet.
+        return None
+    actor_id, build_input, normalize = actor
 
     try:
         from apify_client import ApifyClient
         client = ApifyClient(token)
-        
-        # Select actor based on channel
-        actor_id = "apify/shopee-scraper" if competitor_name == "Shopee" else "apify/lazada-scraper"
-        
-        # Configure search payload
-        run_input = {
-            "search": search_target,
-            "maxItems": 1,
-            "proxy": {
-                "useApifyProxy": True
-            }
-        }
-        
-        # Run the actor in a thread to keep async simple
-        # (In a real production app, you would run this asynchronously via webhooks)
-        run = client.actor(actor_id).call(run_input=run_input, timeout_secs=60)
-        
-        # Fetch results
-        results = list(client.dataset(run["defaultDatasetId"]).list_items().items)
-        if results:
-            item = results[0]
-            # Parse Shopee/Lazada raw vs net pricing fields
-            raw_price = float(item.get("price_before_discount", 0) or item.get("price", 0))
-            net_price = float(item.get("price", 0))
-            discount = raw_price - net_price
-            voucher = item.get("voucher_info", None)
-            promo = item.get("promotion_name", None)
-            url = item.get("url", f"https://www.shopee.vn/product/{item.get('shopid')}/{item.get('itemid')}")
-            
+        run_input = build_input(search_target)
+
+        # Apify's client is synchronous and would block the event loop, so run it in a
+        # worker thread and cap the run so a stuck actor can't stall the batch.
+        # max_items + max_total_charge_usd protect against runaway credit usage.
+        def _run_actor():
+            run = client.actor(actor_id).call(
+                run_input=run_input,
+                run_timeout=timedelta(seconds=APIFY_TIMEOUT_SECS),
+                max_items=1,
+                max_total_charge_usd=APIFY_MAX_CHARGE_USD,
+            )
+            # apify-client 3.x returns a typed Run object; normalize to get the dataset id.
+            run_data = dict(run)
+            dataset_id = run_data.get("default_dataset_id") or run_data.get("defaultDatasetId")
+            return list(client.dataset(dataset_id).list_items().items)
+
+        # Actors occasionally return empty/error for a given query; retry once.
+        for attempt in range(2):
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.to_thread(_run_actor), timeout=APIFY_TIMEOUT_SECS + 10
+                )
+                if results:
+                    # Normalize the actor-specific shape, then hand to the shared mapper
+                    # (price / original_price / name / url / availability / rating).
+                    return normalize(results[0])
+            except Exception as e:
+                print(f"Apify scrape failed for {competitor_name} (attempt {attempt + 1}): {e}")
+    except Exception as e:
+        print(f"Apify setup failed for {competitor_name}: {e}")
+
+    return None
+
+BRIGHTDATA_API_URL = "https://api.brightdata.com/request"
+# Hasaki (Tailwind-based) renders prices via JS: the sale price is an orange bold span,
+# the original price a line-through span. Bright Data must render JS (render=True).
+HASAKI_VND_PATTERN = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
+
+
+def _parse_vnd(text: str):
+    match = HASAKI_VND_PATTERN.search(text or "")
+    if not match:
+        return None
+    digits = re.sub(r"\D", "", match.group())
+    return float(digits) if digits else None
+
+
+async def scrape_via_brightdata(barcode: str, competitor_name: str, target_url: str | None = None) -> dict:
+    """
+    Fetch a competitor page through Bright Data's Web Unlocker API (token-based) to bypass
+    bot protection, then parse the price from the returned HTML. Wired for Hasaki only.
+    Returns None (-> pipeline falls back) unless BRIGHTDATA_API_TOKEN + BRIGHTDATA_ZONE are set.
+    """
+    if competitor_name != "Hasaki":
+        return None
+
+    token = (os.getenv("BRIGHT_DATA_KEY", "") or os.getenv("BRIGHTDATA_API_TOKEN", "")).strip()
+    zone = os.getenv("BRIGHTDATA_ZONE", "").strip()
+    if not token or not zone:
+        return None
+
+    # Always hit Hasaki's catalogsearch endpoint (the tim-kiem page has a different
+    # layout our selectors don't match). Reuse the name-based query from the link URL.
+    from urllib.parse import urlparse, parse_qs, quote
+    query = barcode
+    if target_url:
+        parsed_q = parse_qs(urlparse(target_url).query).get("q")
+        if parsed_q:
+            query = parsed_q[0]
+    url = f"https://hasaki.vn/catalogsearch/result/?q={quote(query)}"
+
+    def _fetch_html():
+        import requests
+        resp = requests.post(
+            BRIGHTDATA_API_URL,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            # render=True runs JS so Hasaki's client-side prices are present in the HTML.
+            json={"zone": zone, "url": url, "format": "raw", "render": True},
+            timeout=BRIGHTDATA_TIMEOUT_SECS,
+        )
+        resp.raise_for_status()
+        return resp.text
+
+    from bs4 import BeautifulSoup
+
+    # Bright Data's JS render is occasionally flaky (returns before prices render), so
+    # retry once before giving up to the simulator.
+    for attempt in range(2):
+        try:
+            html = await asyncio.wait_for(asyncio.to_thread(_fetch_html), timeout=BRIGHTDATA_TIMEOUT_SECS + 5)
+            soup = BeautifulSoup(html, "html.parser")
+
+            # Sale price = first orange bold span; original = first line-through span.
+            sale_el = soup.select_one("span.text-orange.font-bold") or soup.select_one("span.text-orange")
+            original_el = soup.select_one("span.line-through")
+            net_price = _parse_vnd(sale_el.get_text()) if sale_el else None
+            raw_price = _parse_vnd(original_el.get_text()) if original_el else None
+
+            if net_price:
+                raw_price = raw_price or net_price
+                return {
+                    "raw_price": raw_price,
+                    "net_price": net_price,
+                    "discount": max(raw_price - net_price, 0.0),
+                    "stock_status": "IN_STOCK",
+                    "voucher_details": None,
+                    "promo_mechanics": "Bright Data",
+                    "url": url,
+                }
+        except Exception as e:
+            print(f"Bright Data scrape failed for {competitor_name} (attempt {attempt + 1}): {e}")
+
+    return None
+
+
+# Pharmacity public search API. Override via PHARMACITY_API_URL in .env; must contain a
+# "{keyword}" placeholder where the URL-encoded search term is inserted.
+PHARMACITY_API = os.getenv(
+    "PHARMACITY_API_URL",
+    "https://api-gateway.pharmacity.vn/pmc-ecm-product/api/public/search/index"
+    "?platform=1&index=1&limit=5&total=0&refresh=true&order=desc&order_by=de-xuat&keyword={keyword}",
+)
+
+
+async def scrape_via_pharmacity_api(search_target: str, competitor_name: str) -> dict:
+    """Hit Pharmacity's public search JSON API directly (free, no proxy/render needed).
+    Prices live in data.items[].variants[]."""
+    if competitor_name != "Pharmacity":
+        return None
+
+    from urllib.parse import quote
+
+    url = PHARMACITY_API.format(keyword=quote(search_target))
+
+    def _fetch_json():
+        import requests
+        resp = requests.get(url, headers={"User-Agent": settings.USER_AGENT}, timeout=settings.REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return resp.json()
+
+    try:
+        data = await asyncio.wait_for(asyncio.to_thread(_fetch_json), timeout=settings.REQUEST_TIMEOUT + 5)
+        items = ((data or {}).get("data") or {}).get("items") or []
+        for item in items:
+            variants = item.get("variants") or []
+            if not variants:
+                continue
+            variant = variants[0]
+            net_price = variant.get("price")
+            if not net_price:
+                continue
+            raw_price = variant.get("original_price") or net_price
+            stock = "IN_STOCK" if (variant.get("stock_status") or "").upper() == "AVAILABLE" else "OUT_OF_STOCK"
             return {
-                "raw_price": raw_price,
-                "price": net_price,
-                "discount": discount,
-                "voucher_details": voucher,
-                "promo_mechanics": promo,
-                "url": url
+                "raw_price": float(raw_price),
+                "net_price": float(net_price),
+                "discount": max(float(raw_price) - float(net_price), 0.0),
+                "stock_status": stock,
+                "voucher_details": None,
+                "promo_mechanics": "Pharmacity API",
+                "url": f"https://www.pharmacity.vn/{item.get('slug', '')}",
             }
     except Exception as e:
-        print(f"Apify scrape failed for {competitor_name}: {e}")
-        
+        print(f"Pharmacity API failed: {e}")
+
     return None
+
 
 async def scrape_via_crawl4ai(barcode: str, competitor_name: str, target_url: str | None = None) -> dict:
     """
     Integrates Crawl4AI to crawl competitor pharmacy/health websites (e.g. Hasaki, Pharmacity)
     and parse HTML into structured price grids using markdown extraction.
     """
-    if competitor_name not in ["Pharmacity", "GrabMart"]:
+    if competitor_name not in ["Pharmacity"]:
         return None
-        
+
     try:
         from crawl4ai import AsyncWebCrawler
         from bs4 import BeautifulSoup
-        
+
         # Build search URL
-        search_url = ""
-        if target_url:
-            search_url = target_url
-        elif competitor_name == "Pharmacity":
-            search_url = f"https://www.pharmacity.vn/tim-kiem?q={barcode}"
-        else: # GrabMart search simulation
-            search_url = f"https://grab.com/mart/search?q={barcode}"
-            
+        search_url = target_url or f"https://www.pharmacity.vn/tim-kiem?q={barcode}"
+
         async with AsyncWebCrawler(verbose=False) as crawler:
-            result = await crawler.arun(url=search_url, bypass_cache=True)
+            result = await crawler.arun(url=search_url, bypass_cache=True, page_timeout=SCRAPE_TIMEOUT_MS)
             
             if result.success and result.markdown:
                 # Use BeautifulSoup or simple markdown keyword extraction to find prices
@@ -121,7 +326,7 @@ async def scrape_via_playwright(barcode: str, competitor_name: str, target_url: 
     Launches a headless browser, waits for JS rendering (networkidle),
     and extracts structured price data.
     """
-    if competitor_name not in ["Hasaki", "TikTok Shop"]:
+    if competitor_name not in ["Hasaki"]:
         return None
 
     try:
@@ -152,7 +357,7 @@ async def scrape_via_playwright(barcode: str, competitor_name: str, target_url: 
             page = await context.new_page()
             
             # Go to page and wait for JS to load
-            await page.goto(url, wait_until="networkidle", timeout=15000)
+            await page.goto(url, wait_until="networkidle", timeout=SCRAPE_TIMEOUT_MS)
             
             price_element = None
             raw_price = None
@@ -219,16 +424,6 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
         discount_pct = rng.choice([0.0, 0.05, 0.08, 0.12])
         voucher = rng.choice([None, "Voucher tích lũy", "Mã giảm 15k"])
         promo = rng.choice([None, "Combo mua 2 giảm 5%", "Flash Sale"])
-    elif competitor_name == "TikTok Shop":
-        price_factor = rng.uniform(0.78, 0.95)
-        discount_pct = rng.choice([0.0, 0.10, 0.20])
-        voucher = rng.choice([None, "Voucher Livestream 25k", "Mã người mới"])
-        promo = rng.choice([None, "Flash Sale hàng hiệu"])
-    elif competitor_name == "GrabMart":
-        price_factor = rng.uniform(0.98, 1.15)
-        discount_pct = 0.0
-        voucher = None
-        promo = None
     else:  # Pharmacity / website competitor
         price_factor = rng.uniform(0.95, 1.05)
         discount_pct = rng.choice([0.0, 0.05])
@@ -260,48 +455,76 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
         "url": url
     }
 
+async def _fetch_competitor_price(product, competitor: str, link_url):
+    """Fetch one channel's price (network only, no DB) so callers can run channels in
+    parallel. Always returns a dict: a real scrape result or the simulator fallback."""
+    price_data = None
+
+    # 1. Try real Apify integration for Shopee/Lazada
+    if competitor in ["Shopee", "Lazada"]:
+        price_data = await scrape_via_apify(product.name or product.barcode, competitor)
+        if price_data:
+            price_data = map_marketplace_result(competitor, price_data, link_url)
+
+    # 2a. Try Bright Data Web Unlocker API for Hasaki (bypasses bot protection).
+    if not price_data and competitor in ["Hasaki"]:
+        price_data = await scrape_via_brightdata(product.barcode, competitor, link_url)
+
+    # 2b. Fall back to direct Playwright for Hasaki (TikTok Shop left to simulator).
+    if not price_data and competitor in ["Hasaki"]:
+        price_data = await scrape_via_playwright(product.barcode, competitor, link_url)
+
+    # 3a. Pharmacity: hit its public search JSON API directly (free, reliable).
+    if not price_data and competitor in ["Pharmacity"]:
+        price_data = await scrape_via_pharmacity_api(product.name or product.barcode, competitor)
+
+    # 3b. Fall back to Crawl4AI for independent web pages.
+    if not price_data and competitor in ["Pharmacity"]:
+        price_data = await scrape_via_crawl4ai(product.barcode, competitor, link_url)
+
+    # 4. Fallback to the simulator so every channel always yields a comparable price
+    if not price_data:
+        price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode, link_url)
+
+    return price_data
+
+
 async def scrape_competitor_prices_for_product_async(db: Session, product_id: int) -> list:
     """
     Main entry point for scraping competitor prices asynchronously.
-    First tries Apify (marketplaces) and Crawl4AI (web). Falls back to mock simulator if keys are missing.
+    All channels are fetched concurrently; a failed/slow real scraper falls back to the
+    simulator quickly so one channel never stalls the others.
     """
     product = db.query(models.Product).filter(models.Product.id == product_id).first()
     if not product:
         return []
 
-    new_prices = []
-    
-    for competitor in COMPETITORS:
-        link = ensure_competitor_link(db, product, competitor)
-        price_data = None
-        
-        # 1. Try real Apify integration for Shopee/Lazada
-        if competitor in ["Shopee", "Lazada"]:
-            price_data = await scrape_via_apify(product.name or product.barcode, competitor)
-            
-        # 2. Try direct Playwright for Hasaki / TikTok Shop
-        if not price_data and competitor in ["Hasaki", "TikTok Shop"]:
-            price_data = await scrape_via_playwright(product.barcode, competitor, link.url if link else None)
-            
-        # 3. Try Crawl4AI for independent web pages
-        if not price_data and competitor in ["Pharmacity", "GrabMart"]:
-            price_data = await scrape_via_crawl4ai(product.barcode, competitor, link.url if link else None)
-            
-        # 3. Fallback to mock simulator if no data was fetched
-        if not price_data:
-            price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode, link.url if link else None)
-        elif competitor in ["Shopee", "Lazada"]:
-            price_data = map_marketplace_result(competitor, price_data, link.url if link else None)
+    # Ensure links first (sync DB), then fetch every channel in parallel.
+    links = {competitor: ensure_competitor_link(db, product, competitor) for competitor in COMPETITORS}
+    fetched = await asyncio.gather(
+        *(_fetch_competitor_price(product, competitor, links[competitor].url if links[competitor] else None)
+          for competitor in COMPETITORS),
+        return_exceptions=True,
+    )
 
+    from app.services.cpi_calculator import check_price_anomaly
+
+    new_prices = []
+    for competitor, price_data in zip(COMPETITORS, fetched):
+        # A channel that raised is not fatal: fall back to the simulator.
+        if isinstance(price_data, Exception) or not price_data:
+            link = links[competitor]
+            price_data = simulate_competitor_price(
+                product.guardian_price, competitor, product.barcode, link.url if link else None
+            )
+
+        link = links[competitor]
         if link and price_data.get("url") and link.url != price_data["url"]:
             link.url = price_data["url"]
             link.discovery_method = "scraped"
 
-        # Check for price anomalies using the historical cross-validation helper
-        from app.services.cpi_calculator import check_price_anomaly
         is_suspicious = check_price_anomaly(db, product.id, competitor, price_data["net_price"])
 
-        # Write to DB
         price_record = models.CompetitorPrice(
             product_id=product.id,
             competitor_name=competitor,
@@ -319,10 +542,10 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         new_prices.append(price_record)
 
     db.commit()
-    
+
     # Recalculate CPI index
     calculate_cpi_for_product(db, product.id)
-    
+
     return new_prices
 
 def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
@@ -343,9 +566,47 @@ def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
     else:
         return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id))
 
+async def _scrape_all_products_async(product_ids: list) -> dict:
+    """Scrape many SKUs concurrently, each on its own DB session (Sessions are not safe
+    to share across concurrent coroutines), bounded by PRODUCT_CONCURRENCY."""
+    from concurrent.futures import ThreadPoolExecutor
+    from app.db.session import SessionLocal
+
+    # asyncio.to_thread shares a small default pool; the blocking Apify/Bright Data calls
+    # would starve it and time out into the simulator, so give them plenty of workers.
+    loop = asyncio.get_event_loop()
+    loop.set_default_executor(ThreadPoolExecutor(max_workers=max(32, PRODUCT_CONCURRENCY * len(COMPETITORS))))
+
+    semaphore = asyncio.Semaphore(PRODUCT_CONCURRENCY)
+
+    async def _one(product_id: int):
+        async with semaphore:
+            worker_db = SessionLocal()
+            try:
+                rows = await scrape_competitor_prices_for_product_async(worker_db, product_id)
+                return product_id, rows
+            except Exception as exc:
+                print(f"Scrape failed for product {product_id}: {exc}")
+                return product_id, []
+            finally:
+                worker_db.close()
+
+    pairs = await asyncio.gather(*(_one(pid) for pid in product_ids))
+    return dict(pairs)
+
+
 def run_scraper_for_all_products(db: Session):
-    products = db.query(models.Product).all()
-    results = {}
-    for p in products:
-        results[p.id] = scrape_realtime_competitor_prices(db, p.id)
+    product_ids = [pid for (pid,) in db.query(models.Product.id).all()]
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if loop.is_running():
+        import nest_asyncio
+        nest_asyncio.apply()
+
+    results = loop.run_until_complete(_scrape_all_products_async(product_ids))
     return results

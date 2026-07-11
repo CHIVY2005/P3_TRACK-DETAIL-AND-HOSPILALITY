@@ -3,22 +3,25 @@ import axios from 'axios'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { ExternalLink, Search } from 'lucide-react'
 import { API_BASE_URL } from '../api.js'
+import { getCache, setCache } from '../dataCache.js'
 
 function ProductInsights() {
-  const [products, setProducts] = useState([])
-  const [selectedProductId, setSelectedProductId] = useState('')
+  const cachedProducts = getCache('productInsights') ?? []
+  const [products, setProducts] = useState(cachedProducts)
+  const [selectedProductId, setSelectedProductId] = useState(cachedProducts[0]?.id ?? '')
   const [productDetail, setProductDetail] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(cachedProducts.length === 0)
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        setLoading(true)
+        if (getCache('productInsights') === null) setLoading(true)
         const res = await axios.get(`${API_BASE_URL}/pricing/cpi-index`)
+        setCache('productInsights', res.data)
         setProducts(res.data)
         if (res.data.length > 0) {
-          setSelectedProductId(res.data[0].id)
+          setSelectedProductId((prev) => prev || res.data[0].id)
         }
       } catch (err) {
         console.error('Error fetching product list', err)
@@ -45,9 +48,11 @@ function ProductInsights() {
     fetchProductDetail()
   }, [selectedProductId])
 
+  const query = searchQuery.toLowerCase()
   const filteredProducts = products.filter(
     (product) =>
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.barcode.includes(searchQuery)
+      (product.name || '').toLowerCase().includes(query) ||
+      String(product.barcode || '').includes(searchQuery)
   )
 
   const chartData = getChartData(productDetail)

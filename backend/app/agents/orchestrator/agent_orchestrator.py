@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db import models
-from app.agents.market_observer.market_observer_agent import build_alert_decision_context
+from app.agents.market_observer.market_observer_agent import build_alert_decision_contexts
 from app.agents.market_observer.market_observer_tools import refresh_market_prices
 from app.agents.margin_guardian.margin_guardian_agent import run_margin_guardian_for_alert
 from app.agents.shared.runtime_support import get_langfuse_client
@@ -141,8 +141,7 @@ def run_agentic_optimization_loop(
 
 def _select_priority_alerts(db: Session, alerts: list, limit: int) -> list:
     ranked = []
-    for alert in alerts:
-        context = build_alert_decision_context(db, alert)
+    for alert, context in zip(alerts, build_alert_decision_contexts(db, alerts)):
         if context.get("status") != "ready":
             continue
         severity = {"High": 0, "Medium": 1, "Low": 2}.get(context.get("severity"), 9)

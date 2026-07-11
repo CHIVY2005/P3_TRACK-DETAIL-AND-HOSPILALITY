@@ -11,8 +11,6 @@ from app.db import models
 MONITORED_CHANNELS = (
     "Shopee",
     "Lazada",
-    "TikTok Shop",
-    "GrabMart",
     "Pharmacity",
     "Hasaki",
 )
@@ -50,10 +48,16 @@ def get_latest_channel_observations(
     )
 
 
-def build_channel_intelligence(db: Session) -> Dict[str, object]:
-    products = db.query(models.Product).all()
+def build_channel_intelligence(
+    db: Session,
+    products: Optional[List[models.Product]] = None,
+    observations: Optional[List[models.CompetitorPrice]] = None,
+) -> Dict[str, object]:
+    if products is None:
+        products = db.query(models.Product).all()
     guardian_prices = {product.id: product.guardian_price for product in products}
-    observations = get_latest_channel_observations(db)
+    if observations is None:
+        observations = get_latest_channel_observations(db)
 
     observed_channels = {row.competitor_name for row in observations}
     channels = list(MONITORED_CHANNELS)

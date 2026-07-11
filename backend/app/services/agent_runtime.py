@@ -6,6 +6,7 @@ from app.db import models
 from app.db.session import SessionLocal
 from app.agents.shared.runtime_support import flush_langfuse, get_langfuse_client
 from app.services.agent_engine import run_agentic_optimization_loop
+from app.services import response_cache
 
 
 _agent_lock = threading.Lock()
@@ -115,6 +116,7 @@ def run_agent_task(task_id: int, refresh_market_data: bool, source: str) -> bool
     finally:
         db.close()
         flush_langfuse()
+        response_cache.invalidate_all()
         with _state_lock:
             _is_agent_running = False
             _last_completed_at = datetime.utcnow().isoformat()
