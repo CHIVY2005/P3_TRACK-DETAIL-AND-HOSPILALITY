@@ -1,3 +1,15 @@
+# backend/app/routes/sync.py
+"""
+Sync endpoints — single-barcode sync + bulk async sync for 200+ SKU.
+
+Architecture:
+    POST /sync-price/{barcode}         → synchronous single-product scrape
+    POST /v1/sync/all                  → HTTP 202 + BackgroundTasks bulk scrape
+    POST /v1/sync/force                → HTTP 202 + force re-scrape all platforms
+
+Bulk sync uses asyncio.gather to fan-out Apify calls concurrently.
+The DTO pipeline is: raw_json → ScraperFactory.parse_to_dto → UPSERT price_history.
+"""
 import re
 import urllib.parse
 from typing import Any, Dict, List, Optional
@@ -9,15 +21,22 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.config import settings
+from app.config import settings, get_actor_id_for_platform
 from app.db.models import CompetitorLink, PriceHistory, SkuMaster
-from app.db.session import get_db
+from app.db.session import get_db, SessionLocal
 from app.services.apify_client import ApifyClientService, get_apify_service
+from app.services.scrapers.base import CompetitorPriceDTO, clean_price_string
+from app.services.scrapers.factory import ScraperFactory, SUPPORTED_PLATFORMS
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Response models
+# ---------------------------------------------------------------------------
 class SyncResponse(BaseModel):
     status: str
     matched_product: Optional[Dict[str, Any]] = None
@@ -25,18 +44,23 @@ class SyncResponse(BaseModel):
     message: Optional[str] = None
 
 
+class BulkSyncResponse(BaseModel):
+    status: str
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# Utility: legacy price parser (kept for single-barcode route)
+# ---------------------------------------------------------------------------
 def parse_price_to_int(value: Any) -> Optional[int]:
     if value is None:
         return None
-
     if isinstance(value, (int, float)):
         return int(float(value))
-
     if isinstance(value, str):
         digits = re.sub(r"[^\d]", "", value.strip())
         if digits:
             return int(digits)
-
     return None
 
 
@@ -108,6 +132,9 @@ def select_first_valid_match(results: List[Dict[str, Any]], fallback_platform: s
     return None
 
 
+# ---------------------------------------------------------------------------
+# Endpoint 1: Single barcode sync (legacy — synchronous)
+# ---------------------------------------------------------------------------
 @router.post("/sync-price/{barcode}", response_model=SyncResponse)
 def sync_price(
     barcode: str,
@@ -173,7 +200,10 @@ def sync_price(
     new_price = PriceHistory(
         barcode=barcode,
         platform=platform,
+        product_name=match.get("title"),
+        shop_name=match.get("platform", platform),
         scraped_price=scraped_price_int,
+        is_in_stock=True,
         promotion=match.get("promotion"),
         raw_data=match.get("raw_data"),
     )
@@ -187,35 +217,142 @@ def sync_price(
     }
 
 
-logger = logging.getLogger(__name__)
+# ---------------------------------------------------------------------------
+# DTO → PostgreSQL UPSERT pipeline
+# ---------------------------------------------------------------------------
+def upsert_dtos_to_db(dtos: List[CompetitorPriceDTO], db: Session) -> int:
+    """
+    Write a batch of clean CompetitorPriceDTOs into `price_history`.
+    Returns the number of records written.
+    """
+    count = 0
+    for dto in dtos:
+        record = PriceHistory(
+            barcode=dto.barcode,
+            platform=dto.platform,
+            product_name=dto.product_name,
+            shop_name=dto.shop_name,
+            scraped_price=dto.competitor_price,
+            is_in_stock=dto.is_in_stock,
+            promotion=dto.promotion_info,
+            raw_data=dto.raw_payload,
+        )
+        db.add(record)
+        count += 1
 
+    if count > 0:
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error(f"DB commit failed: {e}")
+            raise
+    return count
+
+
+# ---------------------------------------------------------------------------
+# Async worker: scrape a single SKU across all linked platforms
+# ---------------------------------------------------------------------------
+async def _scrape_single_sku(
+    sku: SkuMaster,
+    db: Session,
+    apify_service: ApifyClientService,
+) -> int:
+    """
+    Scrape one SKU across all its competitor_links.
+    Returns number of DTO records persisted.
+    """
+    links = db.query(CompetitorLink).filter(CompetitorLink.barcode == sku.barcode).all()
+
+    total = 0
+    for link in links:
+        platform = link.platform.lower().strip()
+        try:
+            actor_id = get_actor_id_for_platform(platform)
+        except ValueError:
+            logger.warning(f"No actor for platform '{platform}', skipping.")
+            continue
+
+        try:
+            raw_items = apify_service.run_scraper(actor_id=actor_id, target_url=link.url)
+            if not raw_items:
+                continue
+            if not isinstance(raw_items, list):
+                raw_items = [raw_items]
+
+            scraper = ScraperFactory.get_scraper(platform)
+            dtos = scraper.parse_to_dto(raw_items, barcode=sku.barcode)
+            if dtos:
+                total += upsert_dtos_to_db(dtos, db)
+
+        except Exception as e:
+            logger.error(f"Error scraping {sku.barcode}@{platform}: {e}")
+
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Bulk sync background worker
+# ---------------------------------------------------------------------------
 async def execute_bulk_sync(db: Session):
+    """
+    Fan-out scrape for ALL active SKUs across ALL their competitor links.
+    Called as a BackgroundTask — runs after HTTP 202 is returned.
+    """
     try:
-        # We try to filter by is_active if it exists, otherwise just query all.
-        # Assuming is_active is on SkuMaster based on requirements.
-        active_skus = db.query(SkuMaster).filter(getattr(SkuMaster, "is_active", True) == True).all()
-        
+        all_skus = db.query(SkuMaster).all()
         apify_service = get_apify_service()
+        total_records = 0
 
-        for sku in active_skus:
-            competitor_links = db.query(CompetitorLink).filter(CompetitorLink.barcode == sku.barcode).all()
-            
-            for link in competitor_links:
-                try:
-                    # Using existing get_apify_service() for tasks
-                    actor_id = getattr(settings, "HASAKI_SCRAPER_ACTOR_ID", "default_actor_id")
-                    # Since existing code is synchronous apify_service.run_scraper, we run it in thread or directly if it's fine.
-                    apify_service.run_scraper(actor_id=actor_id, target_url=link.url)
-                except Exception as e:
-                    logger.error(f"Error syncing SKU {sku.barcode} with URL {link.url}: {e}")
-                
-            await asyncio.sleep(random.uniform(2.0, 5.0))
-            
+        logger.info(f"[BulkSync] Starting for {len(all_skus)} SKUs…")
+
+        # Process in batches of 10 to avoid overwhelming Apify
+        batch_size = 10
+        for i in range(0, len(all_skus), batch_size):
+            batch = all_skus[i:i + batch_size]
+
+            tasks = [
+                _scrape_single_sku(sku, db, apify_service)
+                for sku in batch
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for r in results:
+                if isinstance(r, int):
+                    total_records += r
+                elif isinstance(r, Exception):
+                    logger.error(f"[BulkSync] batch error: {r}")
+
+            # Polite delay between batches
+            await asyncio.sleep(random.uniform(1.0, 3.0))
+
+        logger.info(f"[BulkSync] Completed. Total records written: {total_records}")
+
     except Exception as e:
-        logger.error(f"Fatal error during bulk sync: {e}")
+        logger.error(f"[BulkSync] Fatal error: {e}")
 
-@router.post("/v1/sync/all", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_bulk_sync(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+
+# ---------------------------------------------------------------------------
+# Endpoint 2: Bulk sync — HTTP 202 + BackgroundTasks
+# ---------------------------------------------------------------------------
+@router.post("/v1/sync/all", status_code=status.HTTP_202_ACCEPTED, response_model=BulkSyncResponse)
+async def trigger_bulk_sync(background_tasks: BackgroundTasks):
+    db = SessionLocal()
     background_tasks.add_task(execute_bulk_sync, db)
-    return {"status": "processing", "message": "Bulk synchronization started successfully"}
+    return {
+        "status": "processing",
+        "message": "Sync process initiated in background",
+    }
 
+
+# ---------------------------------------------------------------------------
+# Endpoint 3: Force sync — re-scrape everything immediately
+# ---------------------------------------------------------------------------
+@router.post("/v1/sync/force", status_code=status.HTTP_202_ACCEPTED, response_model=BulkSyncResponse)
+async def trigger_force_sync(background_tasks: BackgroundTasks):
+    db = SessionLocal()
+    background_tasks.add_task(execute_bulk_sync, db)
+    return {
+        "status": "processing",
+        "message": "Force sync initiated in background — all platforms will be re-scraped",
+    }

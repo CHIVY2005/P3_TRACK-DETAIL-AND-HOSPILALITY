@@ -38,9 +38,23 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 3
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     
-    # Apify Actor IDs
-    HASAKI_SCRAPER_ACTOR_ID: str = "xtracto/shopee-scraper"
+    # --- Scraper Provider Toggle ---
+    # Values: "apify" (default) | "brightdata" | "zenrows"
+    SCRAPER_PROVIDER: str = "apify"
+
+    # --- Apify Actor IDs (one per platform) ---
+    APIFY_ACTOR_SHOPEE: str = "xtracto/shopee-scraper"
+    APIFY_ACTOR_LAZADA: str = "xtracto/lazada-scraper"
+    APIFY_ACTOR_TIKTOK: str = "xtracto/tiktok-scraper"
+    APIFY_ACTOR_GRABMART: str = "tanduy.work/garbmart-scarper"
+    APIFY_ACTOR_HASAKI: str = "tanduy.work/hasaki-scraper"
+    APIFY_ACTOR_PHARMACITY: str = "tanduy.work/pharmacity-scraper "
+
+    # Legacy aliases (backward compat)
+    HASAKI_SCRAPER_ACTOR_ID: str = "xtracto/hasaki-scraper"
     HASAKI_SEARCH_ACTOR_ID: str = "hasaki-search-actor-id"
+
+    # --- Fallback Fixture ---
     APIFY_FIXTURE_FALLBACK: bool = True
     APIFY_FIXTURE_PATH: str = "backend/data/apify_fallback_fixture.json"
     FRONTEND_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
@@ -64,6 +78,27 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
 settings = Settings()
+
+# Platform → Actor ID mapping for the orchestrator
+_PLATFORM_ACTOR_MAP = {
+    "shopee": settings.APIFY_ACTOR_SHOPEE,
+    "lazada": settings.APIFY_ACTOR_LAZADA,
+    "tiktok": settings.APIFY_ACTOR_TIKTOK,
+    "tiktok_shop": settings.APIFY_ACTOR_TIKTOK,
+    "grabmart": settings.APIFY_ACTOR_GRABMART,
+    "hasaki": settings.APIFY_ACTOR_HASAKI,
+    "pharmacity": settings.APIFY_ACTOR_PHARMACITY,
+}
+
+
+def get_actor_id_for_platform(platform: str) -> str:
+    """Resolve the Apify Actor ID for a given platform name."""
+    key = platform.lower().strip()
+    actor_id = _PLATFORM_ACTOR_MAP.get(key)
+    if actor_id is None:
+        raise ValueError(f"No Apify Actor configured for platform '{platform}'")
+    return actor_id
+
 
 import json
 

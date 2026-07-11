@@ -1,6 +1,6 @@
-# backend/app/services/scrapers/strategies/grabmart.py
+# backend/app/services/scrapers/strategies/tiktok.py
 """
-GrabMart parser — transforms raw Apify GrabMart output into CompetitorPriceDTO.
+TikTok Shop parser — transforms raw Apify TikTok-scraper output into CompetitorPriceDTO.
 """
 from __future__ import annotations
 
@@ -11,12 +11,11 @@ from app.services.scrapers.base import BaseScraper, CompetitorPriceDTO, clean_pr
 
 logger = logging.getLogger(__name__)
 
-PLATFORM = "grabmart"
-DEFAULT_SHOP = "GrabMart"
+PLATFORM = "tiktok"
 
 
-class GrabMartScraper(BaseScraper):
-    """GrabMart strategy implementation."""
+class TikTokScraper(BaseScraper):
+    """TikTok Shop strategy implementation."""
 
     async def fetch_raw_json(self, target_url: str) -> Dict[str, Any]:
         return {}
@@ -35,12 +34,12 @@ class GrabMartScraper(BaseScraper):
                 if dto is not None:
                     dtos.append(dto)
             except Exception as e:
-                logger.warning(f"[GrabMartParser] skipped item: {e}")
+                logger.warning(f"[TikTokParser] skipped item: {e}")
         return dtos
 
     @staticmethod
     def _parse_single(item: Dict[str, Any], barcode: str) -> CompetitorPriceDTO | None:
-        product_name = item.get("title") or item.get("name") or ""
+        product_name = item.get("title") or item.get("name") or item.get("product_name") or ""
         if not product_name:
             return None
 
@@ -49,12 +48,13 @@ class GrabMartScraper(BaseScraper):
         if price is None or price <= 0:
             return None
 
-        shop_name = item.get("merchant_name") or item.get("shop_name") or DEFAULT_SHOP
+        shop_name = item.get("shop_name") or item.get("seller_name") or "TikTok Seller"
 
-        stock_raw = str(item.get("stock_status") or item.get("availability") or "").upper()
+        stock_raw = str(item.get("stock_status") or item.get("availability") or "IN_STOCK").upper()
         is_in_stock = stock_raw not in ("OUT_OF_STOCK", "UNAVAILABLE", "")
 
-        promotion_info = item.get("promotion") or item.get("discount_info") or None
+        discount = item.get("discount") or item.get("discount_pct")
+        promotion_info = f"Giảm {discount}%" if discount else None
 
         return CompetitorPriceDTO(
             barcode=barcode,

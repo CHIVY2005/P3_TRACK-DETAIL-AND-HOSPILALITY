@@ -140,13 +140,17 @@ class CompetitorLink(Base):
 class PriceHistory(Base):
     """
     The scraped pricing results from competitors.
+    Extended to carry product_name and shop_name for direct frontend rendering.
     """
     __tablename__ = "price_history"
 
     id = Column(Integer, primary_key=True, index=True)
     barcode = Column(String, ForeignKey("sku_master.barcode"), nullable=False)
     platform = Column(String, nullable=False)
+    product_name = Column(String, nullable=True)       # Tên sản phẩm bóc từ sàn
+    shop_name = Column(String, nullable=True)           # Tên shop bán
     scraped_price = Column(Integer, nullable=False)
+    is_in_stock = Column(Boolean, nullable=True, default=True)
     promotion = Column(String, nullable=True)
     raw_data = Column(JSONB, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())

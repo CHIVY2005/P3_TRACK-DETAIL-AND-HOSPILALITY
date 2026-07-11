@@ -1,6 +1,19 @@
-# backend/app/services/scrapers/strategies/grabmart.py
+# backend/app/services/scrapers/strategies/lazada.py
 """
-GrabMart parser — transforms raw Apify GrabMart output into CompetitorPriceDTO.
+Lazada.vn parser — transforms raw Apify Lazada-scraper output into CompetitorPriceDTO.
+
+Lazada Apify actor shape:
+{
+    "name": "Sữa Rửa Mặt Cetaphil…",
+    "price": 385000,              ← plain VND
+    "originalPrice": 459000,
+    "sellerName": "Cetaphil Official",
+    "inStock": true,
+    "discount": "-16%",
+    "itemId": "i987654321",
+    "url": "https://www.lazada.vn/products/...",
+    ...
+}
 """
 from __future__ import annotations
 
@@ -11,12 +24,11 @@ from app.services.scrapers.base import BaseScraper, CompetitorPriceDTO, clean_pr
 
 logger = logging.getLogger(__name__)
 
-PLATFORM = "grabmart"
-DEFAULT_SHOP = "GrabMart"
+PLATFORM = "lazada"
 
 
-class GrabMartScraper(BaseScraper):
-    """GrabMart strategy implementation."""
+class LazadaScraper(BaseScraper):
+    """Lazada strategy implementation."""
 
     async def fetch_raw_json(self, target_url: str) -> Dict[str, Any]:
         return {}
@@ -35,12 +47,12 @@ class GrabMartScraper(BaseScraper):
                 if dto is not None:
                     dtos.append(dto)
             except Exception as e:
-                logger.warning(f"[GrabMartParser] skipped item: {e}")
+                logger.warning(f"[LazadaParser] skipped item: {e}")
         return dtos
 
     @staticmethod
     def _parse_single(item: Dict[str, Any], barcode: str) -> CompetitorPriceDTO | None:
-        product_name = item.get("title") or item.get("name") or ""
+        product_name = item.get("name") or item.get("title") or ""
         if not product_name:
             return None
 
@@ -49,12 +61,15 @@ class GrabMartScraper(BaseScraper):
         if price is None or price <= 0:
             return None
 
-        shop_name = item.get("merchant_name") or item.get("shop_name") or DEFAULT_SHOP
+        shop_name = item.get("sellerName") or item.get("shop_name") or "Lazada Seller"
 
-        stock_raw = str(item.get("stock_status") or item.get("availability") or "").upper()
-        is_in_stock = stock_raw not in ("OUT_OF_STOCK", "UNAVAILABLE", "")
+        in_stock = item.get("inStock", True)
+        if isinstance(in_stock, str):
+            in_stock = in_stock.lower() not in ("false", "0", "out_of_stock")
+        is_in_stock = bool(in_stock)
 
-        promotion_info = item.get("promotion") or item.get("discount_info") or None
+        discount = item.get("discount") or item.get("discount_pct")
+        promotion_info = str(discount) if discount else None
 
         return CompetitorPriceDTO(
             barcode=barcode,
