@@ -69,12 +69,19 @@ def seed_demo_dataset(db: Session) -> dict:
     latest_links = {}
 
     for row, source_timestamp in zip(competitor_rows, source_timestamps):
+        raw_price = _parse_float(row.get("raw_price"))
+        net_price = _parse_float(row.get("net_price"))
+        if raw_price is None:
+            raw_price = net_price if net_price is not None else 0.0
+        if net_price is None:
+            net_price = raw_price
+
         price = models.CompetitorPrice(
             product_id=int(row["product_id"]),
             competitor_name=row["competitor_name"].strip(),
-            raw_price=_parse_float(row.get("raw_price")),
+            raw_price=raw_price,
             discount=_parse_float(row.get("discount")) or 0.0,
-            net_price=_parse_float(row.get("net_price")),
+            net_price=net_price,
             stock_status=(row.get("stock_status") or "IN_STOCK").strip(),
             is_suspicious=str(row.get("is_suspicious", "")).strip().lower() == "true",
             voucher_details=(row.get("voucher_details") or "").strip() or None,

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Any, Dict, Optional, List
 from datetime import datetime
 
 # --- Competitor Price Schemas ---
@@ -13,6 +13,7 @@ class CompetitorPriceBase(BaseModel):
     voucher_details: Optional[str] = None
     promo_mechanics: Optional[str] = None
     url: Optional[str] = None
+    raw_payload: Optional[Dict[str, Any]] = None
 
 class CompetitorPriceCreate(CompetitorPriceBase):
     product_id: int

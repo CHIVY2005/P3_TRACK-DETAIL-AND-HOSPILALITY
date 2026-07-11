@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, func
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, func, JSON
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from app.db.session import Base
 
 class Product(Base):
@@ -37,6 +38,7 @@ class CompetitorPrice(Base):
     voucher_details = Column(String(255), nullable=True)
     promo_mechanics = Column(String(255), nullable=True)
     url = Column(String(500), nullable=True)
+    raw_payload = Column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     scraped_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
