@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     # Backwards compatibility / defaults
     ENV: str = "development"
+    AUTO_SEED_DEMO: bool = True
 
     # Database engine selection
     USE_SQLITE: bool = True
+    SQLITE_DB_PATH: str = ""
 
     # PostgreSQL Database Config
     DB_HOST: str = "localhost"
@@ -62,9 +64,12 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.USE_SQLITE:
-            backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            db_path = os.path.join(backend_dir, "guardian.db")
-            return f"sqlite:///{db_path}"
+            if self.SQLITE_DB_PATH.strip():
+                db_path = os.path.abspath(self.SQLITE_DB_PATH.strip())
+            else:
+                backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                db_path = os.path.join(backend_dir, "guardian.db")
+            return f"sqlite:///{db_path.replace(os.sep, '/')}"
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property

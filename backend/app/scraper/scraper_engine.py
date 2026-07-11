@@ -260,7 +260,7 @@ def simulate_competitor_price(product_guardian_price: float, competitor_name: st
         "url": url
     }
 
-async def scrape_competitor_prices_for_product_async(db: Session, product_id: int) -> list:
+async def scrape_competitor_prices_for_product_async(db: Session, product_id: int, force_simulation: bool = False, commit: bool = True) -> list:
     """
     Main entry point for scraping competitor prices asynchronously.
     First tries Apify (marketplaces) and Crawl4AI (web). Falls back to mock simulator if keys are missing.
@@ -272,22 +272,24 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
     new_prices = []
     
     for competitor in COMPETITORS:
-        link = ensure_competitor_link(db, product, competitor)
+        link = ensure_competitor_link(db, product, competitor, commit=commit)
         price_data = None
         
-        # 1. Try real Apify integration for Shopee/Lazada
-        if competitor in ["Shopee", "Lazada"]:
-            price_data = await scrape_via_apify(product.name or product.barcode, competitor)
+        # 1. Try real scraping only if not forced to simulate
+        if not force_simulation:
+            # Try real Apify integration for Shopee/Lazada
+            if competitor in ["Shopee", "Lazada"]:
+                price_data = await scrape_via_apify(product.name or product.barcode, competitor)
+                
+            # Try direct Playwright for Hasaki / TikTok Shop
+            if not price_data and competitor in ["Hasaki", "TikTok Shop"]:
+                price_data = await scrape_via_playwright(product.barcode, competitor, link.url if link else None)
+                
+            # Try Crawl4AI for independent web pages
+            if not price_data and competitor in ["Pharmacity", "GrabMart"]:
+                price_data = await scrape_via_crawl4ai(product.barcode, competitor, link.url if link else None)
             
-        # 2. Try direct Playwright for Hasaki / TikTok Shop
-        if not price_data and competitor in ["Hasaki", "TikTok Shop"]:
-            price_data = await scrape_via_playwright(product.barcode, competitor, link.url if link else None)
-            
-        # 3. Try Crawl4AI for independent web pages
-        if not price_data and competitor in ["Pharmacity", "GrabMart"]:
-            price_data = await scrape_via_crawl4ai(product.barcode, competitor, link.url if link else None)
-            
-        # 3. Fallback to mock simulator if no data was fetched
+        # Fallback to mock simulator if no data was fetched (or if forced to simulate)
         if not price_data:
             price_data = simulate_competitor_price(product.guardian_price, competitor, product.barcode, link.url if link else None)
         elif competitor in ["Shopee", "Lazada"]:
@@ -318,14 +320,17 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
         db.add(price_record)
         new_prices.append(price_record)
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     
     # Recalculate CPI index
-    calculate_cpi_for_product(db, product.id)
+    calculate_cpi_for_product(db, product.id, commit=commit)
     
     return new_prices
 
-def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
+def scrape_realtime_competitor_prices(db: Session, product_id: int, force_simulation: bool = False, commit: bool = True) -> list:
     """
     Synchronous wrapper to run async scraper in FastAPI routes.
     """
@@ -339,13 +344,17 @@ def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
         # Run in thread or task if loop is already running
         import nest_asyncio
         nest_asyncio.apply()
-        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id))
+        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id, force_simulation, commit))
     else:
-        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id))
+        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id, force_simulation, commit))
 
 def run_scraper_for_all_products(db: Session):
+    # Force simulation on bulk run unless explicitly enabled in environment variables
+    # to avoid launching 400 Chromium instances / blocking the server
+    force_sim = os.getenv("ENABLE_REAL_SCRAPING") != "True"
     products = db.query(models.Product).all()
     results = {}
     for p in products:
-        results[p.id] = scrape_realtime_competitor_prices(db, p.id)
+        results[p.id] = scrape_realtime_competitor_prices(db, p.id, force_simulation=force_sim, commit=False)
+    db.commit()
     return results

@@ -94,10 +94,10 @@ function Configuration() {
     <div className="page-stack">
       <section className="header">
         <div className="header-title">
-          <h1>Operations Configuration</h1>
+          <h1>Commercial Guardrails</h1>
           <p>
-            This screen now supports dynamic CSV and JSON ingestion, preserves the demo reset path, and lets us tune
-            the thresholds that drive the Margin Guardian decision flow.
+            Set pricing thresholds, margin floors, catalog inputs, and recovery controls for every automated
+            decision cycle.
           </p>
         </div>
       </section>

@@ -36,6 +36,7 @@ class AgentState(TypedDict):
 
 
 def run_margin_analysis(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    append_log(state, f"[{timestamp()}] [Observation] Initiating commercial analysis for Product ID {state['product_id']}...")
     metrics = run_agent_tool(
         state,
         "compute_margin_scenarios",
@@ -52,38 +53,51 @@ def run_margin_analysis(state: MutableMapping[str, Any]) -> MutableMapping[str, 
     append_log(
         state,
         (
-            f"  Guardian {state['guardian_price']:,.0f} VND | Cost {state['cost_price']:,.0f} VND | "
-            f"Competitor {state['competitor_price']:,.0f} VND"
+            f"  THOUGHT: Analyzing financial metrics. Our current price is {state['guardian_price']:,.0f} VND "
+            f"with a cost of {state['cost_price']:,.0f} VND. Competitor price is {state['competitor_price']:,.0f} VND "
+            f"(price gap of {metrics['price_gap_pct']:.1f}%)."
         ),
     )
     append_log(
         state,
         (
-            f"  Current margin {metrics['current_margin_pct']:.1f}% | "
-            f"Margin if matched {metrics['margin_if_matched_pct']:.1f}% | "
-            f"Gap {metrics['price_gap_pct']:.1f}%"
+            f"  THOUGHT: Calculating margins. Current margin is {metrics['current_margin_pct']:.1f}%. "
+            f"If we match competitor, the new margin will be {metrics['margin_if_matched_pct']:.1f}%."
         ),
     )
     return state
 
 
 def determine_strategy(state: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
-    append_log(state, f"[{timestamp()}] [Node: determine_strategy] Selecting strategy")
+    append_log(state, f"[{timestamp()}] [Reasoning] Evaluating margin safety...")
     cfg = get_agent_config()
     min_margin_pct = cfg.get("min_margin", 0.15) * 100.0
     custom_instruction = cfg.get("custom_instruction", "")
     target_margin = state["target_margin"]
-    strategy = "match" if target_margin >= min_margin_pct else "negotiate"
-    reason = (
-        f"Rule-based decision with target margin {target_margin:.1f}% "
-        f"and floor {min_margin_pct:.1f}%."
-    )
+    
+    if target_margin >= min_margin_pct:
+        strategy = "match"
+        thought = (
+            f"THOUGHT: The competitor price is cheaper, but matching it yields a margin of {target_margin:.1f}%, "
+            f"which is above our safety threshold of {min_margin_pct:.1f}%. I will propose a price alignment to maintain competitiveness."
+        )
+    else:
+        strategy = "negotiate"
+        thought = (
+            f"THOUGHT: Matching the competitor price would reduce our margin to {target_margin:.1f}%, "
+            f"which falls below our safety threshold of {min_margin_pct:.1f}%. To protect our bottom line, I must NOT change our retail price. "
+            "Instead, I will initiate a supplier support negotiation request to secure cost protection."
+        )
+
+    reason = f"Agent evaluated target margin {target_margin:.1f}% vs floor {min_margin_pct:.1f}%."
     if custom_instruction:
-        reason = f"{reason} Instruction: {custom_instruction}"
+        reason = f"{reason} Custom guide: {custom_instruction}"
+        thought = f"{thought} (Applying guideline: '{custom_instruction}')"
 
     state["strategy"] = strategy
     state["decision_reason"] = reason
-    append_log(state, f"  [Decision] {strategy.upper()} | {reason}")
+    append_log(state, f"  [Reasoning Output] Strategy: {strategy.upper()}")
+    append_log(state, f"  {thought}")
     return state
 
 
@@ -123,7 +137,7 @@ def apply_auto_match(state: MutableMapping[str, Any]) -> MutableMapping[str, Any
         }
     )
     state["actions_created"] = actions
-    append_log(state, f"  [Action] Price-match proposal created for {state['competitor_name']}.")
+    append_log(state, f"  [Action] Initiated PriceMatcher tool. Successfully created a retail price alignment proposal from {state['guardian_price']:,.0f} to {state['competitor_price']:,.0f} VND.")
     return state
 
 

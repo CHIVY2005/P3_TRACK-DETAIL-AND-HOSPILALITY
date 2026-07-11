@@ -17,27 +17,39 @@ function AgentWorkspace() {
 
   const fetchHistory = async () => {
     try {
-      const [tasksRes, actionsRes, briefingRes, runtimeRes] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get(`${API_BASE_URL}/agent/tasks?limit=10`),
         axios.get(`${API_BASE_URL}/agent/actions?limit=50`),
         axios.get(`${API_BASE_URL}/agent/briefing?limit=4`),
         axios.get(`${API_BASE_URL}/agent/runtime-status`),
       ])
 
-      setTasks(tasksRes.data)
-      setActions(actionsRes.data)
-      setBriefing(briefingRes.data)
-      setRuntimeStatus(runtimeRes.data)
+      const tasksRes = results[0].status === 'fulfilled' ? results[0].value : null
+      const actionsRes = results[1].status === 'fulfilled' ? results[1].value : null
+      const briefingRes = results[2].status === 'fulfilled' ? results[2].value : null
+      const runtimeRes = results[3].status === 'fulfilled' ? results[3].value : null
 
-      const active = tasksRes.data.find((task) => task.status === 'Running' || task.status === 'Pending')
-      if (active) {
-        setActiveTask(active)
-        setRunning(true)
-      } else {
-        setRunning(false)
-        if (tasksRes.data.length > 0) {
-          setActiveTask(tasksRes.data[0])
+      if (tasksRes) {
+        setTasks(tasksRes.data)
+        const active = tasksRes.data.find((task) => task.status === 'Running' || task.status === 'Pending')
+        if (active) {
+          setActiveTask(active)
+          setRunning(true)
+        } else {
+          setRunning(false)
+          if (tasksRes.data.length > 0) {
+            setActiveTask(tasksRes.data[0])
+          }
         }
+      }
+      if (actionsRes) {
+        setActions(actionsRes.data)
+      }
+      if (briefingRes) {
+        setBriefing(briefingRes.data)
+      }
+      if (runtimeRes) {
+        setRuntimeStatus(runtimeRes.data)
       }
     } catch (err) {
       console.error('Error fetching agent history', err)
@@ -128,10 +140,10 @@ function AgentWorkspace() {
     <div className="page-stack">
       <section className="header">
         <div className="header-title">
-          <h1>Agent Workspace</h1>
+          <h1>Decision Desk</h1>
           <p>
-            Margin Guardian and Supplier Negotiator are now separated under their own backend folders, while this
-            workspace stays focused on operator review, trace visibility, and approvals.
+            Review margin-safe recommendations, inspect decision evidence, and approve or reject every commercial
+            action before execution.
           </p>
         </div>
         <div className="workspace-controls">
@@ -142,11 +154,11 @@ function AgentWorkspace() {
               onChange={(event) => setRefreshMarketData(event.target.checked)}
               disabled={running}
             />
-            <span>Refresh live market data before reasoning</span>
+            <span>Refresh live market data before the decision cycle</span>
           </label>
           <button className="btn btn-accent" onClick={handleRunAgent} disabled={running}>
             <Bot size={16} className={running ? 'pulse' : ''} />
-            {running ? 'Agent running...' : 'Run autonomous agent'}
+            {running ? 'Cycle running...' : 'Run decision cycle'}
           </button>
         </div>
       </section>
@@ -173,7 +185,7 @@ function AgentWorkspace() {
                 </div>
                 <div className="terminal-divider" />
                 <div className="terminal-log-copy">{activeTask.logs}</div>
-                {running ? <div className="blink">█ Coordinating tools and action proposals...</div> : null}
+                {running ? <div className="blink">Coordinating tools and action proposals...</div> : null}
               </>
             ) : (
               <div className="terminal-empty">
@@ -187,7 +199,7 @@ function AgentWorkspace() {
         <section className="actions-sidebar">
           <div className="section-card glass section-fill">
             <div className="section-header">
-              <div className="section-title">Reasoning & trace</div>
+              <div className="section-title">Decision evidence & trace</div>
               {runtimeStatus?.agent?.last_trace_url ? (
                 <a
                   className="inline-link-button"
@@ -226,7 +238,7 @@ function AgentWorkspace() {
                   </article>
                 ))
               ) : (
-                <div className="empty-note">No reasoning summaries yet. Run the agent or wait for fresh alerts.</div>
+                <div className="empty-note">No decision evidence yet. Run a cycle or wait for fresh alerts.</div>
               )}
             </div>
           </div>
@@ -247,7 +259,7 @@ function AgentWorkspace() {
                     <div className="action-card-item" key={action.id}>
                       <div className="action-card-header">
                         <span className={`action-type-badge ${action.action_type === 'AUTO_PRICE_MATCH' ? 'match' : 'draft'}`}>
-                          {action.action_type === 'AUTO_PRICE_MATCH' ? 'Auto price match' : 'Supplier draft'}
+                          {action.action_type === 'AUTO_PRICE_MATCH' ? 'Price alignment' : 'Supplier draft'}
                         </span>
                         <span className="action-card-time">
                           {new Date(action.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}

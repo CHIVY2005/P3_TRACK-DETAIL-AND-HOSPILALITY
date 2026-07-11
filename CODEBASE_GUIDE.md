@@ -266,6 +266,18 @@ Reset du lieu demo:
 - insert lai data
 - tinh CPI va alerts
 
+### `backend/app/services/startup_bootstrap.py`
+
+Khoi tao fresh clone an toan:
+
+- dem product truoc khi seed
+- chi seed khi catalog rong
+- chi chay o development/demo/local/test
+- khong ghi de catalog da import
+- tra bootstrap status qua root health endpoint
+
+Dieu khien bang `ENV` va `AUTO_SEED_DEMO`.
+
 ### `backend/app/services/scraped_samples.py`
 
 Doc scrape evidence tu file JSON branch crawl.

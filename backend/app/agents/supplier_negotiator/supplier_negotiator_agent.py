@@ -51,5 +51,5 @@ def draft_supplier_negotiation(state: MutableMapping[str, Any]) -> MutableMappin
         }
     )
     state["actions_created"] = actions
-    append_log(state, "  [Action] Supplier negotiation draft created.")
+    append_log(state, "  [Action] Initiated SupplierNegotiator tool. Successfully drafted a cost-protection email to partner@beautybrands.com defending our target margin.")
     return state

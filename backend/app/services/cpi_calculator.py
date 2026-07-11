@@ -3,7 +3,7 @@ from app.db.models import Product, CompetitorPrice, PricingIndex, Alert
 from app.config import get_agent_config
 from app.services.channel_intelligence import get_latest_channel_observations
 
-def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
+def calculate_cpi_for_product(db: Session, product_id: int, commit: bool = True) -> PricingIndex:
     # 1. Fetch product
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
@@ -55,18 +55,25 @@ def calculate_cpi_for_product(db: Session, product_id: int) -> PricingIndex:
     index_record.competitor_index = round(cpi, 2)
     index_record.average_competitor_price = round(avg_price, 2)
     index_record.recommendation = recommendation
-    db.commit()
-    db.refresh(index_record)
+    
+    if commit:
+        db.commit()
+        db.refresh(index_record)
+    else:
+        db.flush()
 
     # 4. Generate alerts based on prices
-    generate_alerts_for_product(db, product, latest_prices, cpi)
+    generate_alerts_for_product(db, product, latest_prices, cpi, commit=commit)
 
     return index_record
 
-def generate_alerts_for_product(db: Session, product: Product, latest_prices: list, cpi: float):
+def generate_alerts_for_product(db: Session, product: Product, latest_prices: list, cpi: float, commit: bool = True):
     # Clear unacknowledged/unresolved alerts for this product first to avoid cluttering
     db.query(Alert).filter(Alert.product_id == product.id, Alert.is_resolved == False).delete()
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
     cfg = get_agent_config()
     underprice_threshold = cfg.get("underprice_threshold", 0.10)
@@ -109,12 +116,16 @@ def generate_alerts_for_product(db: Session, product: Product, latest_prices: li
                 severity="High" if cheaper_ratio > 0.20 else "Medium"
             ))
 
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 def calculate_all_cpi(db: Session):
     products = db.query(Product).all()
     for product in products:
-        calculate_cpi_for_product(db, product.id)
+        calculate_cpi_for_product(db, product.id, commit=False)
+    db.commit()
 
 def check_price_anomaly(db: Session, product_id: int, competitor_name: str, new_net_price: float) -> bool:
     """

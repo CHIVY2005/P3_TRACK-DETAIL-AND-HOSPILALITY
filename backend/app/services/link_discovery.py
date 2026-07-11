@@ -16,7 +16,7 @@ SEARCH_URL_TEMPLATES = {
 }
 
 
-def ensure_competitor_link(db: Session, product: models.Product, platform: str) -> Optional[models.CompetitorLink]:
+def ensure_competitor_link(db: Session, product: models.Product, platform: str, commit: bool = True) -> Optional[models.CompetitorLink]:
     existing = (
         db.query(models.CompetitorLink)
         .filter(models.CompetitorLink.product_id == product.id, models.CompetitorLink.platform == platform)
@@ -37,8 +37,11 @@ def ensure_competitor_link(db: Session, product: models.Product, platform: str) 
         discovery_method="search-driven",
     )
     db.add(link)
-    db.commit()
-    db.refresh(link)
+    if commit:
+        db.commit()
+        db.refresh(link)
+    else:
+        db.flush()
     return link
 
 

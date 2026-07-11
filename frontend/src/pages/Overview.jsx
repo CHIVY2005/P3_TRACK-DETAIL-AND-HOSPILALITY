@@ -15,8 +15,10 @@ import {
   Activity,
   Clock3,
   Cpu,
+  Database,
   Radar,
   RefreshCw,
+  ServerOff,
   ShieldAlert,
   Sparkles,
   Target,
@@ -24,7 +26,7 @@ import {
   Workflow,
   X,
 } from 'lucide-react'
-import { API_BASE_URL } from '../api.js'
+import { API_BASE_URL, API_ORIGIN } from '../api.js'
 
 function Overview() {
   const [stats, setStats] = useState(null)
@@ -35,11 +37,13 @@ function Overview() {
   const [loading, setLoading] = useState(true)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
   const [triggeringAgent, setTriggeringAgent] = useState(false)
+  const [seedingDemo, setSeedingDemo] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const fetchData = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      const [statsRes, alertsRes, briefingRes, actionsRes, channelRes] = await Promise.all([
+      const results = await Promise.allSettled([
         axios.get(`${API_BASE_URL}/pricing/overview`),
         axios.get(`${API_BASE_URL}/alerts`),
         axios.get(`${API_BASE_URL}/agent/briefing?limit=5`),
@@ -47,13 +51,24 @@ function Overview() {
         axios.get(`${API_BASE_URL}/pricing/channel-index`),
       ])
 
-      setStats(statsRes.data)
-      setAlerts(alertsRes.data)
-      setBriefing(briefingRes.data)
-      setRecentActions(actionsRes.data)
-      setChannelIntelligence(channelRes.data)
+      const setters = [setStats, setAlerts, setBriefing, setRecentActions, setChannelIntelligence]
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          setters[index](result.value.data)
+        }
+      })
+
+      const failures = results.filter((result) => result.status === 'rejected')
+      if (failures.length === results.length) {
+        setLoadError(`Backend is unavailable at ${API_ORIGIN}.`)
+      } else if (failures.length > 0) {
+        setLoadError(`${failures.length} pricing API endpoint(s) did not respond. Data shown may be incomplete.`)
+      } else {
+        setLoadError('')
+      }
     } catch (err) {
       console.error('Error fetching overview data', err)
+      setLoadError(`Unable to load pricing data from ${API_ORIGIN}.`)
     } finally {
       setLoading(false)
     }
@@ -62,6 +77,12 @@ function Overview() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!loadError) return undefined
+    const retryTimer = setInterval(fetchData, 5000)
+    return () => clearInterval(retryTimer)
+  }, [loadError])
 
   const handleTriggerScrape = async () => {
     try {
@@ -98,6 +119,18 @@ function Overview() {
     }
   }
 
+  const handleSeedDemo = async () => {
+    try {
+      setSeedingDemo(true)
+      await axios.post(`${API_BASE_URL}/products/seed-demo`)
+      await fetchData()
+    } catch (err) {
+      setLoadError(err.response?.data?.detail || `Unable to initialize the demo catalog at ${API_ORIGIN}.`)
+    } finally {
+      setSeedingDemo(false)
+    }
+  }
+
   if (loading && !stats && !briefing) {
     return <div className="loading-state">Loading pricing command center...</div>
   }
@@ -106,9 +139,12 @@ function Overview() {
   const briefingSummary = briefing?.summary
   const channels = channelIntelligence?.channels || []
   const queue = briefing?.priority_queue || []
+  const catalogIsEmpty = !loading && (
+    summary?.monitored_sku === 0 || (!summary && stats?.total_sku === 0)
+  )
   const latestTaskLog = briefing?.latest_task?.logs
     ? briefing.latest_task.logs.split('\n').filter(Boolean).slice(-6)
-    : ['No autonomous run yet. Market intelligence is ready for the first decision cycle.']
+    : ['No decision cycle has run yet. Market intelligence is ready for operator review.']
 
   return (
     <div className="page-stack">
@@ -116,32 +152,60 @@ function Overview() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Workflow size={14} />
-            <span>Top 200 SKU / 6 channels / daily autonomous cycle</span>
+            <span>Commercial control room / Daily market read</span>
           </div>
-          <h1>Guardian Pricing Intelligence</h1>
+          <h1>Guardian Pricing OS</h1>
           <p>
-            One operational view of effective competitor prices, promotion mechanics, pricing gaps, margin risk,
-            and human-approved commercial actions.
+            200 priority SKUs. Six channels. One decision loop turning effective competitor prices into
+            margin-safe actions for the commercial team.
           </p>
         </div>
 
         <div className="hero-actions">
           <button className="btn btn-secondary" onClick={handleTriggerScrape} disabled={triggeringScrape}>
             <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-            {triggeringScrape ? 'Scanning channels...' : 'Refresh channels'}
+            {triggeringScrape ? 'Scanning channels...' : 'Refresh market'}
           </button>
           <button className="btn btn-accent" onClick={handleRunAgent} disabled={triggeringAgent}>
             <Cpu size={16} className={triggeringAgent ? 'pulse' : ''} />
-            {triggeringAgent ? 'Agent running...' : 'Run pricing agent'}
+            {triggeringAgent ? 'Cycle running...' : 'Run decision cycle'}
           </button>
         </div>
       </section>
 
+      {loadError ? (
+        <section className="system-notice system-notice-error" role="alert">
+          <div className="system-notice-icon"><ServerOff size={18} /></div>
+          <div className="system-notice-copy">
+            <strong>Pricing data connection needs attention</strong>
+            <span>{loadError}</span>
+          </div>
+          <button type="button" className="btn btn-secondary btn-compact" onClick={fetchData} disabled={loading}>
+            <RefreshCw size={15} className={loading ? 'spin' : ''} />
+            Retry
+          </button>
+        </section>
+      ) : null}
+
+      {catalogIsEmpty ? (
+        <section className="system-notice system-notice-empty">
+          <div className="system-notice-icon"><Database size={18} /></div>
+          <div className="system-notice-copy">
+            <strong>The catalog is empty</strong>
+            <span>Initialize the 200-SKU, six-channel dataset to populate Pricing Command.</span>
+          </div>
+          <button type="button" className="btn btn-accent btn-compact" onClick={handleSeedDemo} disabled={seedingDemo}>
+            <Database size={15} />
+            {seedingDemo ? 'Loading demo...' : 'Load demo data'}
+          </button>
+        </section>
+      ) : null}
+
       <section className="hero-metrics">
         <MetricCard
-          title="Target SKU coverage"
+          title="Priority SKU coverage"
           value={`${summary?.monitored_sku ?? stats?.total_sku ?? 0}/${summary?.target_sku ?? 200}`}
-          detail={`${formatPct(summary?.target_coverage_pct)} of the competition target`}
+          detail={`${formatPct(summary?.target_coverage_pct)} of the priority catalog monitored`}
           icon={<Target size={16} />}
         />
         <MetricCard
@@ -246,7 +310,7 @@ function Overview() {
                     domain={['dataMin - 10', 'dataMax + 10']}
                   />
                   <Tooltip
-                    cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
+                    cursor={{ fill: 'rgba(255, 212, 0, 0.12)' }}
                     contentStyle={{
                       backgroundColor: '#ffffff',
                       borderColor: 'rgba(15, 23, 42, 0.12)',
@@ -258,7 +322,7 @@ function Overview() {
                       'CPI',
                     ]}
                   />
-                  <ReferenceLine y={100} stroke="#5f6f68" strokeDasharray="5 4" />
+                  <ReferenceLine y={100} stroke="#66665f" strokeDasharray="5 4" />
                   <Bar dataKey="cpi" radius={[4, 4, 0, 0]}>
                     {channels.map((entry) => (
                       <Cell key={entry.channel} fill={channelColor(entry.position)} />
@@ -431,7 +495,7 @@ function formatAge(value) {
 function channelColor(position) {
   if (position === 'guardian_premium') return '#c2410c'
   if (position === 'guardian_value') return '#0f9f72'
-  return '#0f766e'
+  return '#d4ad00'
 }
 
 function actionStatusClass(status) {

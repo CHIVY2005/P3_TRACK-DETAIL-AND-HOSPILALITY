@@ -343,7 +343,7 @@ Frontend build:
 
 ## 18. Test va verification
 
-Them `backend/tests/` voi 9 test:
+Them `backend/tests/` voi 12 test:
 
 - channel CPI dung latest clean observation
 - coverage, promo, bundle va flash metrics
@@ -355,14 +355,98 @@ Them `backend/tests/` voi 9 test:
 - static seed route
 - alert feed sap xep dung High -> Medium -> Low
 - full demo seed 200 / 8.400 / 1.200 / 6 channel
+- fresh database duoc bootstrap
+- existing catalog khong bi seed de len
+- production environment khong auto-seed
 
 Ket qua:
 
 ```text
-9 passed
+12 passed
 frontend production build passed
 GET /api/v1/pricing/channel-index -> 200, 6 channels
 GET /api/v1/agent/briefing -> priority queue unique theo product
 ```
 
 Browser skill khong co in-app browser tab trong phien verify nay, nen chua co screenshot desktop/mobile moi. Day la gioi han duy nhat cua lan visual QA nay; API, test va production build deu da pass.
+
+## 19. Update 2026-07-11 - fresh clone co data va UI tu phuc hoi
+
+Nguyen nhan UI rong tren may clone moi:
+
+- `backend/guardian.db` duoc ignore dung theo security/git hygiene
+- startup cu chi `create_all()` table, khong nap catalog
+- Mission Control cu chi ghi API error vao browser console
+
+Da sua:
+
+- them `AUTO_SEED_DEMO=True` va `startup_bootstrap.py`
+- chi auto-seed khi product catalog rong
+- chi cho auto-seed o `development`, `demo`, `local`, `test`
+- giu nguyen catalog neu da co du lieu
+- `ENV=production` khong tu nap fixture
+- root health response tra `bootstrap` status
+- them `SQLITE_DB_PATH` de tach database theo moi truong va test fresh clone
+- normalize Windows SQLite path cho SQLAlchemy
+- sidebar hien Backend API Online / Offline
+- Mission Control tai endpoint doc lap bang `Promise.allSettled`
+- hien loi backend/partial endpoint ngay tren UI
+- database rong co nut `Load demo data`
+- them ignore cho `*.db-journal`
+
+Fresh database integration test da xac minh:
+
+```text
+bootstrap.seeded = true
+products = 200
+competitor_prices = 8400
+competitor_links = 1200
+channels = 6
+```
+
+Backend test suite sau update: `12 passed`.
+
+Frontend production build sau update: `passed`.
+
+Browser skill van khong co in-app browser instance trong phien 2026-07-11, nen khong tao screenshot tu browser skill. Khong dung browser backend khac de thay the.
+
+## 20. Update 2026-07-11 - Guardian visual system va top-5 positioning
+
+Da doi frontend khoi palette beige/teal sang Guardian retail operation palette:
+
+- Guardian yellow cho brand signal, active navigation, primary command va parity
+- charcoal cho sidebar va decision authority
+- white/neutral cho mat do dashboard
+- red / green / blue chi dung cho risk, success va information
+- hero first viewport mang ten `Guardian Pricing OS`
+- sidebar bo toan bo chu `Hackathon MVP`
+- doi navigation thanh `Pricing Command`, `Decision Desk`, `Guardrails`
+- doi `Reasoning & trace` thanh `Decision evidence & trace`
+- doi command thanh `Run decision cycle`
+- mobile/tablet navigation nam ngang de khong che first viewport
+- KPI grid con 2 cot tren tablet va 1 cot tren mobile
+- fixed heading size theo breakpoint, khong scale font bang viewport width
+
+Da them `docs/TOP5_COMPETITION_STRATEGY.md`:
+
+- so sanh mau solution thuong gap cua P1/P2/P4
+- dinh vi P3 thanh closed-loop commercial decision system
+- 5 tru cot can show de vao top 5
+- demo story 5 phut
+- evidence matrix cho tung claim
+- danh sach claim khong duoc noi qua
+- production roadmap theo tac dong, khong theo so luong feature
+
+Da dong bo tai lieu kien truc voi runtime hien tai:
+
+- them `docs/ARCHITECTURE_DIAGRAM.md` voi flow ingestion -> crawl -> CPI -> guardrail -> human approval -> Langfuse
+- chuyen so do LLM/RAG cu sang `docs/archive/legacy-agent-architecture-pre-rule-based.png`
+- ghi ro so do cu chi la lich su va khong phan anh logic pricing hien tai
+
+Da them `docs/END_TO_END_WORKFLOW.md`:
+
+- giai thich luong tu CSV/JSON den market observation, CPI, decision va human approval
+- mo ta ownership cua tung agent va trace Langfuse
+- giai thich SQLite la database nhung nen khong can cai PostgreSQL van luu ben vung vao `backend/guardian.db`
+- neu ro truong hop can chuyen sang PostgreSQL va cach cau hinh hai database mode
+- ghi ro doi bien moi truong khong tu dong migrate du lieu SQLite sang PostgreSQL

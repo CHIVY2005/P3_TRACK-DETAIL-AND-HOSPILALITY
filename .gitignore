@@ -23,6 +23,7 @@ tmp/
 
 # Databases & local logs
 *.db
+*.db-journal
 *.sqlite
 *.sqlite3
 backend/guardian.db
