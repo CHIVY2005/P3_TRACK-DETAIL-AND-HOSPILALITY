@@ -253,3 +253,21 @@ Cơ chế ReAct được thể hiện qua các bước chạy tuần tự của 
   10. `promo_mechanics` (Tên khuyến mãi)
   11. `url` (Link sản phẩm đối thủ)
   12. `scraped_at` (Thời gian cào giá)
+
+---
+
+### Q17: Cách cấu hình và chạy tính năng cào dữ liệu thực tế (Real-time Scraping) tại chỗ như thế nào?
+
+**Trả lời:**
+Nếu trong buổi demo bạn bắt buộc phải thực hiện cào dữ liệu thật từ các trang web/sàn đối thủ, hãy thực hiện theo đúng các chỉ dẫn sau:
+
+1. **Cấu hình biến môi trường**: Mở tệp tin [.env](file:///c:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/.env) ở thư mục gốc và thay đổi hai dòng:
+   ```env
+   ENABLE_REAL_SCRAPING=True
+   APIFY_API_TOKEN=apify_api_your_token_value_here
+   ```
+2. **Cài đặt thư viện Playwright**: Mở cửa sổ dòng lệnh tại thư mục `backend/` và thực thi:
+   ```bash
+   playwright install --with-deps
+   ```
+3. **Chiến lược demo khôn ngoan**: Tuyệt đối không bấm cào hàng loạt (Refresh Market) cho tất cả 200 SKU cùng lúc, vì các website sẽ chặn IP của bạn ngay lập tức do gửi quá nhiều request. Thay vào đó, hãy tìm 1 sản phẩm cụ thể trên Dashboard và bấm nút **Sync (Đồng bộ lẻ)** cho riêng sản phẩm đó. Tiến trình cào thật sẽ chạy độc lập và trả về giá mới nhất chỉ trong vòng 5-10 giây.
