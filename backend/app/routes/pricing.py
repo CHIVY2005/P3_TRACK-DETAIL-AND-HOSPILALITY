@@ -16,6 +16,55 @@ def get_channel_index(db: Session = Depends(get_db)):
     """Return rubric-grade CPI, coverage, freshness, and promotion metrics per channel."""
     return response_cache.cached("pricing:channel-index", lambda: build_channel_intelligence(db))
 
+@router.get("/visualization")
+def get_visualization_data(db: Session = Depends(get_db)):
+    """Du lieu cho tab Truc quan hoa: so sanh gia Guardian vs doi thu + chi phi scrape theo kenh."""
+    cached = response_cache.get("pricing:visualization")
+    if cached is not None:
+        return cached
+
+    from app.config import get_scrape_cost_for
+
+    intelligence = build_channel_intelligence(db)
+
+    # Tong chi phi va so lan cao gom theo tung kenh (tren TAT CA ban ghi, khong chi latest).
+    cost_rows = (
+        db.query(
+            models.CompetitorPrice.competitor_name,
+            func.count(models.CompetitorPrice.id),
+            func.coalesce(func.sum(models.CompetitorPrice.scrape_cost), 0.0),
+        )
+        .group_by(models.CompetitorPrice.competitor_name)
+        .all()
+    )
+    cost_by_channel = {name: {"count": count, "total": float(total)} for name, count, total in cost_rows}
+
+    channels = []
+    for row in intelligence["channels"]:
+        name = row["channel"]
+        cost = cost_by_channel.get(name, {"count": 0, "total": 0.0})
+        channels.append({
+            "channel": name,
+            "avg_guardian_price": row["avg_guardian_price"],
+            "avg_net_price": row["avg_net_price"],
+            "cpi": row["cpi"],
+            "price_gap_pct": row["price_gap_pct"],
+            "scrape_count": cost["count"],
+            "scrape_cost_total": round(cost["total"], 2),
+            "scrape_cost_unit": get_scrape_cost_for(name),
+        })
+
+    result = {
+        "channels": channels,
+        "totals": {
+            "scrape_count": sum(c["scrape_count"] for c in channels),
+            "scrape_cost_total": round(sum(c["scrape_cost_total"] for c in channels), 2),
+        },
+    }
+    response_cache.set("pricing:visualization", result)
+    return result
+
+
 @router.get("/overview", response_model=schemas.OverviewStats)
 def get_overview_stats(db: Session = Depends(get_db)):
     cached = response_cache.get("pricing:overview")

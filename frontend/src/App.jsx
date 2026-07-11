@@ -3,6 +3,7 @@ import axios from 'axios'
 import {
   Activity,
   Bot,
+  BarChart3,
   LayoutDashboard,
   PackageSearch,
   Settings,
@@ -13,12 +14,14 @@ import { API_BASE_URL } from './api.js'
 const Overview = lazy(() => import('./pages/Overview.jsx'))
 const ProductInsights = lazy(() => import('./pages/ProductInsights.jsx'))
 const AgentWorkspace = lazy(() => import('./pages/AgentWorkspace.jsx'))
+const Visualization = lazy(() => import('./pages/Visualization.jsx'))
 const Configuration = lazy(() => import('./pages/Configuration.jsx'))
 
 const NAV_ITEMS = [
   { key: 'overview', label: 'Mission Control', icon: LayoutDashboard },
   { key: 'products', label: 'SKU Insights', icon: PackageSearch },
   { key: 'agent', label: 'Agent Workspace', icon: Bot },
+  { key: 'visualization', label: 'Visualization', icon: BarChart3 },
   { key: 'config', label: 'Operations Config', icon: Settings },
 ]
 
@@ -64,6 +67,8 @@ function App() {
         return <ProductInsights />
       case 'agent':
         return <AgentWorkspace />
+      case 'visualization':
+        return <Visualization />
       case 'config':
         return <Configuration />
       default:

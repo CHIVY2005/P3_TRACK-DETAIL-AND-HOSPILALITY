@@ -19,6 +19,7 @@ from app.agents.supplier_negotiator.supplier_negotiator_agent import draft_suppl
 
 class AgentState(TypedDict):
     product_id: int
+    product_name: str
     competitor_price_id: int
     cost_price: float
     guardian_price: float
@@ -117,6 +118,7 @@ def apply_auto_match(state: MutableMapping[str, Any]) -> MutableMapping[str, Any
                     "decision_summary": {
                         "strategy": state["strategy"],
                         "reason": state["decision_reason"],
+                        "product_name": state.get("product_name"),
                         "competitor_name": state["competitor_name"],
                         "guardian_price": state["guardian_price"],
                         "competitor_price": state["competitor_price"],
@@ -145,6 +147,7 @@ def run_margin_guardian_for_alert(db: Session, alert: models.Alert) -> Dict[str,
     brand_name = (product.name.split()[0:3] and " ".join(product.name.split()[0:3])) or product.category
     initial_state = AgentState(
         product_id=product.id,
+        product_name=product.name,
         competitor_price_id=latest_price.id,
         cost_price=product.cost_price or (product.guardian_price * 0.60),
         guardian_price=product.guardian_price,

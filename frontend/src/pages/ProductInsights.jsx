@@ -209,14 +209,17 @@ function ProductInsights() {
                                     : `${formatSignedCurrency(diff)} (${Math.round(diffPct)}%)`}
                             </td>
                             <td>
-                              {priceRow.url ? (
-                                <a href={priceRow.url} target="_blank" rel="noreferrer" className="inline-link-button">
-                                  <ExternalLink size={13} />
-                                  Open
-                                </a>
-                              ) : (
-                                '-'
-                              )}
+                              {(() => {
+                                const sourceUrl = buildSourceUrl(priceRow.competitor_name, productDetail.name, priceRow.url)
+                                return sourceUrl ? (
+                                  <a href={sourceUrl} target="_blank" rel="noreferrer" className="inline-link-button">
+                                    <ExternalLink size={13} />
+                                    Open
+                                  </a>
+                                ) : (
+                                  '-'
+                                )
+                              })()}
                             </td>
                           </tr>
                         )
@@ -290,18 +293,45 @@ function Metric({ label, value, tone = 'neutral' }) {
   )
 }
 
+// Backend lưu scraped_at là UTC nhưng chuỗi có thể thiếu hậu tố múi giờ.
+// Nếu thiếu 'Z'/offset thì coi như UTC để tránh lệch theo giờ máy (vd +07).
+function parseTs(value) {
+  if (!value) return new Date(NaN)
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value)
+  return new Date(hasTz ? value : `${value}Z`)
+}
+
+// Mau stored url thuong la link product-detail gia (id bia) -> 404. Search URL theo
+// ten san pham luon resolve, nen uu tien search cho cac platform da biet.
+const SEARCH_TEMPLATES = {
+  Shopee: 'https://shopee.vn/search?keyword=',
+  Lazada: 'https://www.lazada.vn/catalog/?q=',
+  Pharmacity: 'https://www.pharmacity.vn/tim-kiem?q=',
+  Hasaki: 'https://hasaki.vn/catalogsearch/result/?q=',
+  'TikTok Shop': 'https://www.tiktok.com/search/product?q=',
+  GrabMart: 'https://food.grab.com/vn/vi/search?q=',
+}
+
+function buildSourceUrl(competitorName, productName, storedUrl) {
+  const template = SEARCH_TEMPLATES[competitorName]
+  if (template && productName) {
+    return `${template}${encodeURIComponent(productName)}`
+  }
+  return storedUrl || null
+}
+
 function getChartData(productDetail, rangeDays = 7) {
   if (!productDetail?.competitor_prices) return []
 
   const sortedRows = [...productDetail.competitor_prices].sort(
-    (a, b) => new Date(a.scraped_at).getTime() - new Date(b.scraped_at).getTime()
+    (a, b) => parseTs(a.scraped_at).getTime() - parseTs(b.scraped_at).getTime()
   )
   if (sortedRows.length === 0) return []
 
   // Chỉ giữ các bản ghi trong cửa sổ rangeDays gần nhất tính từ lần scrape mới nhất.
-  const latestTime = new Date(sortedRows[sortedRows.length - 1].scraped_at).getTime()
+  const latestTime = parseTs(sortedRows[sortedRows.length - 1].scraped_at).getTime()
   const windowStart = latestTime - rangeDays * 24 * 60 * 60 * 1000
-  const rows = sortedRows.filter((row) => new Date(row.scraped_at).getTime() >= windowStart)
+  const rows = sortedRows.filter((row) => parseTs(row.scraped_at).getTime() >= windowStart)
 
   // range = 1 ngày: gom theo giờ:phút (intraday) để thấy từng lần scrape.
   // range > 1 ngày: gom theo ngày, giữ giá cuối cùng trong ngày.
@@ -309,8 +339,11 @@ function getChartData(productDetail, rangeDays = 7) {
   const groups = {}
 
   rows.forEach((row) => {
-    const dateValue = new Date(row.scraped_at)
-    const groupKey = intraday ? dateValue.toISOString().slice(0, 16) : dateValue.toISOString().slice(0, 10)
+    const dateValue = parseTs(row.scraped_at)
+    // Gom nhóm theo giờ/ngày ĐỊA PHƯƠNG để nhãn trục khớp giờ người dùng.
+    const localMs = dateValue.getTime() - dateValue.getTimezoneOffset() * 60000
+    const localIso = new Date(localMs).toISOString()
+    const groupKey = intraday ? localIso.slice(0, 16) : localIso.slice(0, 10)
     if (!groups[groupKey]) {
       groups[groupKey] = {
         sortKey: groupKey,
@@ -334,7 +367,7 @@ function getLatestCompetitorRows(productDetail) {
 
   const latestByChannel = new Map()
   const sortedRows = [...productDetail.competitor_prices].sort((a, b) => {
-    const timeDelta = new Date(b.scraped_at).getTime() - new Date(a.scraped_at).getTime()
+    const timeDelta = parseTs(b.scraped_at).getTime() - parseTs(a.scraped_at).getTime()
     return timeDelta || b.id - a.id
   })
 

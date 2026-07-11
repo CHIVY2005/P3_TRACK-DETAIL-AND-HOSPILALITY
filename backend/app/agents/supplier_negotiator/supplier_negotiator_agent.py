@@ -41,6 +41,7 @@ def draft_supplier_negotiation(state: MutableMapping[str, Any]) -> MutableMappin
                     "decision_summary": {
                         "strategy": state["strategy"],
                         "reason": state.get("decision_reason"),
+                        "product_name": state.get("product_name"),
                         "competitor_name": state["competitor_name"],
                         "guardian_price": state["guardian_price"],
                         "competitor_price": state["competitor_price"],

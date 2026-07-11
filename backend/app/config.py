@@ -113,6 +113,33 @@ def get_agent_config() -> dict:
     }
 
 
+# Don gia (VND) uoc luong cho moi lan cao du lieu tren tung platform.
+# Dung de tinh chi phi scrape va luu vao DB.
+DEFAULT_SCRAPE_COST_PER_PLATFORM = {
+    "Shopee": 300.0,
+    "Lazada": 300.0,
+    "Pharmacity": 200.0,
+    "Hasaki": 200.0,
+    "TikTok Shop": 350.0,
+    "GrabMart": 250.0,
+}
+DEFAULT_SCRAPE_COST_FALLBACK = 250.0
+
+
+def get_scrape_cost_config() -> dict:
+    """Doc bang don gia scrape tu config.json, mac dinh la bang tren."""
+    cfg = get_agent_config()
+    table = cfg.get("scrape_cost_per_platform")
+    if isinstance(table, dict) and table:
+        return table
+    return DEFAULT_SCRAPE_COST_PER_PLATFORM
+
+
+def get_scrape_cost_for(platform: str) -> float:
+    table = get_scrape_cost_config()
+    return float(table.get(platform, DEFAULT_SCRAPE_COST_FALLBACK))
+
+
 def save_agent_config(config_data: dict):
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(backend_dir, "data", "config.json")

@@ -11,6 +11,31 @@ from app.services.db_keepalive import start_db_keepalive, stop_db_keepalive
 # This ensures that once the user runs the project, the tables are auto-created.
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_scrape_cost_column():
+    """Add + backfill competitor_prices.scrape_cost on pre-existing DBs (create_all won't alter)."""
+    from sqlalchemy import inspect, text
+    from app.config import get_scrape_cost_for
+
+    inspector = inspect(engine)
+    if "competitor_prices" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("competitor_prices")}
+    if "scrape_cost" in columns:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE competitor_prices ADD COLUMN scrape_cost FLOAT DEFAULT 0.0 NOT NULL"))
+        names = [r[0] for r in conn.execute(text("SELECT DISTINCT competitor_name FROM competitor_prices"))]
+        for name in names:
+            conn.execute(
+                text("UPDATE competitor_prices SET scrape_cost = :cost WHERE competitor_name = :name"),
+                {"cost": get_scrape_cost_for(name), "name": name},
+            )
+
+
+_ensure_scrape_cost_column()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Backend API for real-time pricing tracking, competitor index (CPI) calculations and automated price alerts.",

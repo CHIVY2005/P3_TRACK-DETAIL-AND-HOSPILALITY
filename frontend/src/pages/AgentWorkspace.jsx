@@ -408,6 +408,7 @@ function MarginExplainer({ summary, floorPct }) {
 
   return (
     <div className={`margin-explainer ${isMatch ? 'is-match' : 'is-negotiate'}`}>
+      {summary.product_name ? <div className="margin-explainer-product">{summary.product_name}</div> : null}
       <div className="margin-explainer-head">
         <strong>Vì sao {isMatch ? 'MATCH' : 'NEGOTIATE'}?</strong>
         <span>{summary.competitor_name}</span>

@@ -37,6 +37,7 @@ class CompetitorPrice(Base):
     voucher_details = Column(String(255), nullable=True)
     promo_mechanics = Column(String(255), nullable=True)
     url = Column(String(500), nullable=True)
+    scrape_cost = Column(Float, default=0.0, nullable=False)  # chi phi (VND) cho lan cao du lieu nay
     scraped_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

@@ -4,10 +4,10 @@ import random
 import asyncio
 import difflib
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.db import models
-from app.config import settings
+from app.config import settings, get_scrape_cost_for
 from app.services.cpi_calculator import calculate_cpi_for_product
 from app.services.link_discovery import ensure_competitor_link
 from app.services.platform_mappers import map_marketplace_result
@@ -596,7 +596,8 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
             voucher_details=price_data["voucher_details"],
             promo_mechanics=price_data["promo_mechanics"],
             url=price_data["url"],
-            scraped_at=datetime.utcnow()
+            scrape_cost=get_scrape_cost_for(competitor),
+            scraped_at=datetime.now(timezone.utc)
         )
         db.add(price_record)
         new_prices.append(price_record)
