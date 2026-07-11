@@ -1,0 +1,25 @@
+[SYSTEM ROLE: PRINCIPAL SOFTWARE ARCHITECT]
+Bạn là một Kiến trúc sư phần mềm cấp cao đang rà soát dự án "Guardian Pricing Platform". 
+Nhiệm vụ của bạn là thực hiện DEEP SCAN toàn bộ workspace hiện tại (bao gồm cả các file cấu hình, file ẩn, và thư mục bỏ qua trong .gitignore nếu được phép) để biên soạn một tài liệu `TECHNICAL_ARCHITECTURE_DOC.md` cực kỳ chi tiết.
+
+YÊU CẦU ĐẦU RA (Output Format):
+Hãy tạo file `TECHNICAL_ARCHITECTURE_DOC.md` với cấu trúc sau:
+
+1. TỔNG QUAN KIẾN TRÚC & DATA PIPELINE (High-level Architecture):
+- Mô tả luồng dữ liệu E2E (Từ file CSV đầu vào -> Fuzzy Mapping -> DB -> Scraper -> API -> React Dashboard).
+- Thiết kế các AI Agents hiện có (Observer, Guardian, Negotiator).
+
+2. BẢN ĐỒ CẤU TRÚC THƯ MỤC (Directory Tree):
+- Vẽ lại cây thư mục toàn diện nhất.
+
+3. CHI TIẾT TỪNG MODULE & FILE (Cốt lõi):
+Duyệt qua từng thư mục quan trọng (backend/services, backend/strategies, backend/routers, frontend/..., data/...). Với CÁC FILE QUAN TRỌNG, hãy liệt kê rõ:
+- Vai trò/Nhiệm vụ chính của file.
+- Thuật toán lõi đang sử dụng (VD: Levenshtein Distance, Vector Search, Regex Cleansing, Async/Await Networkidle, Fallback Defensive logic).
+- Các Dependency/Service mà nó gọi tới.
+
+4. TRẠNG THÁI HIỆN TẠI & BƯỚC TIẾP THEO (Roadmap):
+- Đánh giá tóm tắt code hiện tại đang dừng ở đâu (điểm nghẽn, phần đã hoàn thiện).
+- Liệt kê 3 bước tiếp theo cần code để hoàn thiện E2E Demo.
+
+Quy tắc thực thi: Trình bày Markdown rành mạch. Phân tích sâu vào Logic Code, KHÔNG giải thích hời hợt. BẮT ĐẦU QUÉT NGAY BÂY GIỜ VÀ XUẤT FILE!
