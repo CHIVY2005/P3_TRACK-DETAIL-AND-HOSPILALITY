@@ -1,6 +1,7 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.config import settings
 from app.db.session import engine, SessionLocal
@@ -16,6 +17,27 @@ except ImportError:  # pragma: no cover - startup fallback for demo environments
 # Create database tables automatically for the hackathon environment.
 # This ensures that once the user runs the project, the tables are auto-created.
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_compat_schema() -> None:
+    """
+    Keep pre-existing PostgreSQL databases aligned with the current ORM models.
+
+    The hackathon stack reuses an existing volume, so `create_all()` alone will not
+    backfill newly added nullable columns. We patch the known drift here so the app
+    can continue running against older databases without a manual migration step.
+    """
+    statements = (
+        "ALTER TABLE price_history ADD COLUMN IF NOT EXISTS product_name VARCHAR;",
+        "ALTER TABLE price_history ADD COLUMN IF NOT EXISTS shop_name VARCHAR;",
+        "ALTER TABLE price_history ADD COLUMN IF NOT EXISTS is_in_stock BOOLEAN DEFAULT TRUE;",
+    )
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
+ensure_compat_schema()
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler() if AsyncIOScheduler else None

@@ -6,8 +6,9 @@ import ProductInsights from './pages/ProductInsights.jsx'
 import AgentWorkspace from './pages/AgentWorkspace.jsx'
 import Configuration from './pages/Configuration.jsx'
 
-// Base URL for Backend API
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8001/api/v1'
+// Accept either a raw backend origin or a fully qualified /api/v1 base.
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001').replace(/\/$/, '')
+export const API_BASE_URL = rawApiBaseUrl.endsWith('/api/v1') ? rawApiBaseUrl : `${rawApiBaseUrl}/api/v1`
 
 function App() {
   const [activeTab, setActiveTab] = useState('overview')

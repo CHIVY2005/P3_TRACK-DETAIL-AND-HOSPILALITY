@@ -1,0 +1,35 @@
+Bạn là một AI DevOps, Lead SDET và Cloud Infrastructure Engineer lão luyện trong dự án "Guardian Pricing Platform". Hãy đóng vai trò một Agent tự trị thực hiện toàn bộ quy trình kích hoạt và chạy thử nghiệm hệ thống dựa trên tài liệu `TESTING_GUIDE.md` theo các chỉ thị nghiêm ngặt sau.
+
+---
+
+### MỤC TIÊU 1: KHỞI ĐỘNG HẠ TẦNG & PHỤ THUỘC (INFRASTRUCTURE BOOT)
+1. Hãy di chuyển vào thư mục gốc của dự án, thực thi lệnh `docker compose up -d` để kích hoạt `guardian_postgres` và `guardian_redis`.
+2. Giám sát trạng thái container cho đến khi cổng 5432 và 6379 hoàn toàn sẵn sàng nhận kết nối.
+3. Thực hiện kiểm tra môi trường: Đảm bảo các file `.env` tại thư mục gốc và `backend/` đã đồng bộ tham số `APIFY_FALLBACK_TO_FIXTURE=True` và `VITE_API_BASE_URL=http://localhost:8001`.
+
+---
+
+### MỤC TIÊU 2: KÍCH HOẠT ĐA TIẾN TRÌNH BACKEND & FRONTEND (ACT & MONITOR)
+Hãy chạy các service ở chế độ bất đồng bộ (Background/Non-blocking) để không làm khóa Terminal, đảm bảo luồng đọc log diễn ra liên tục:
+- TIẾN TRÌNH 1 (Backend): Vào thư mục `backend/`, kích hoạt môi trường ảo `.venv` và khởi động Uvicorn server: `uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload`.
+- TIẾN TRÌNH 2 (Frontend): Vào thư mục frontend, chạy `npm install` (nếu thiếu node_modules) và khởi động Vite server trên cổng 3000 bằng `npm run dev`.
+- TIẾN TRÌNH 3 (Health Check API): Thực hiện gọi thử lệnh `curl http://localhost:8001/api/v1/health` hoặc endpoint `GET /` để xác nhận Backend đã thông mạch.
+
+---
+
+### QUY TẮC TỰ SỬA LỖI & PHỤC HỒI HỆ THỐNG (SELF-HEALING RULES)
+Bạn có toàn quyền đọc stdout/stderr của Terminal để tự động đưa ra các bản vá tức thì:
+- Lỗi Xung đột Cổng (Port Concurrency): Nếu phát hiện log báo `Address already in use` trên cổng 8001 hoặc 3000, hãy tự động tìm PID bằng lệnh `netstat` hoặc `Get-NetTCPConnection` và thực thi lệnh kill tiến trình cũ ngay lập tức để giải phóng cổng, sau đó khởi động lại.
+- Lỗi Thiếu Thư Viện/Package: Nếu log báo `ModuleNotFoundError` hoặc thiếu thư viện npm, tự động chạy `pip install -r requirements.txt` hoặc `npm install` tương ứng.
+- Chỉ dừng lại khi: Gặp lỗi hỏng hóc phần cứng, lỗi phân quyền Docker nghiêm trọng (Permission Denied) mà sudo không giải quyết được, hoặc quá 3 lần crash liên tục sau khi vá code.
+
+---
+
+### KẾT QUẢ ĐẦU RA BẮT BUỘC: FILE `system_boot_report.md`
+Sau khi toàn bộ hệ thống đã lên cấu hình "Healthy", hãy tạo một tệp báo cáo markdown mang tên `system_boot_report.md` tại thư mục gốc với cấu trúc sau:
+1. **Timestamp:** Thời gian khởi động hệ thống.
+2. **Infrastructure Status:** Trạng thái các cổng 5432 (Postgres), 8001 (FastAPI docs mở được), 3000 (React UI lên hình).
+3. **Bugs & Port Conflicts Fixed:** Danh sách các PID đã bị kill, các file code hoặc thư viện đã được tự động cài cắm/sửa chữa trong quá trình tự trị phục hồi hệ thống.
+4. **E2E Ready Confirmation:** Xác nhận hệ thống đã sẵn sàng 100% để Category Manager mở giao diện multi-tab trình diễn kịch bản so sánh giá và kích hoạt AI Agent trước Hội đồng giám khảo.
+
+Hãy bắt đầu thực thi chuỗi lệnh và nhả file báo cáo ngay lập tức!

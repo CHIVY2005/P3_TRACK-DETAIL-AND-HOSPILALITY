@@ -69,6 +69,8 @@ def normalize_scraper_item(raw_item: Dict[str, Any], fallback_platform: str) -> 
         return None
 
     title = raw_item.get("title") or raw_item.get("name") or raw_item.get("product_title")
+    barcode = raw_item.get("barcode") or raw_item.get("sku") or raw_item.get("item_id")
+    brand_name = raw_item.get("brand_name") or raw_item.get("brand") or raw_item.get("manufacturer")
     current_price = parse_price_to_int(
         raw_item.get("current_price")
         if raw_item.get("current_price") is not None
@@ -103,14 +105,21 @@ def normalize_scraper_item(raw_item: Dict[str, Any], fallback_platform: str) -> 
             url = None
 
     discount_pct = raw_item.get("discount_pct")
-    promotion = f"Giảm {discount_pct}%" if discount_pct not in (None, "", 0) else None
+    promotion = raw_item.get("promotion") or raw_item.get("promotion_info") or (
+        f"Giảm {discount_pct}%" if discount_pct not in (None, "", 0) else None
+    )
 
     sku_platform = raw_item.get("sku_platform") or raw_item.get("item_id") or raw_item.get("id") or raw_item.get("sku")
+    shop_name = raw_item.get("shop_name") or raw_item.get("sellerName") or raw_item.get("merchant_name") or fallback_platform
 
     normalized = {
         "platform": raw_item.get("platform") or fallback_platform,
+        "barcode": str(barcode) if barcode is not None else None,
+        "brand_name": brand_name,
+        "shop_name": shop_name,
         "title": title,
         "current_price": current_price,
+        "competitor_price": current_price,
         "original_price": original_price,
         "promotion": promotion,
         "sku_platform": str(sku_platform) if sku_platform is not None else None,
@@ -201,7 +210,7 @@ def sync_price(
         barcode=barcode,
         platform=platform,
         product_name=match.get("title"),
-        shop_name=match.get("platform", platform),
+        shop_name=match.get("shop_name", match.get("platform", platform)),
         scraped_price=scraped_price_int,
         is_in_stock=True,
         promotion=match.get("promotion"),
