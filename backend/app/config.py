@@ -116,10 +116,10 @@ def get_agent_config() -> dict:
 # Don gia (VND) uoc luong cho moi lan cao du lieu tren tung platform.
 # Dung de tinh chi phi scrape va luu vao DB.
 DEFAULT_SCRAPE_COST_PER_PLATFORM = {
-    "Shopee": 300.0,
-    "Lazada": 300.0,
-    "Pharmacity": 200.0,
-    "Hasaki": 200.0,
+    "Shopee": 300.0,      # Apify (tra phi)
+    "Lazada": 300.0,      # Apify (tra phi)
+    "Pharmacity": 0.0,    # API JSON cong khai - mien phi
+    "Hasaki": 0.0,        # API JSON cong khai - mien phi
     "TikTok Shop": 350.0,
     "GrabMart": 250.0,
 }
