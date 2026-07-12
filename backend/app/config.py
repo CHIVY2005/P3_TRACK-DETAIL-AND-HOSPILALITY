@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     PRICING_TARGET_SKU_COUNT: int = 200
     PRICING_FRESHNESS_HOURS: int = 24
     AGENT_SCHEDULER_ENABLED: bool = True
-    AGENT_SCHEDULE_INTERVAL_SECONDS: int = 86400
+    AGENT_SCHEDULE_INTERVAL_SECONDS: int = 60
 
     @field_validator("ALERT_UNDERPRICE_THRESHOLD", "ALERT_OVERPRICE_THRESHOLD", mode="before")
     @classmethod
