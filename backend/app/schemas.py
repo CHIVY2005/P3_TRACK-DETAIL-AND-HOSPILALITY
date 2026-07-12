@@ -195,6 +195,8 @@ class AgentBriefingSummary(BaseModel):
     average_cpi: float
     channels_covered: int
     last_scrape_at: Optional[datetime] = None
+    average_data_quality_pct: float = 0.0
+    average_decision_confidence_pct: float = 0.0
 
 
 class AgentBriefingChannel(BaseModel):
@@ -228,6 +230,9 @@ class AgentBriefingPriority(BaseModel):
     message: str
     channel_url: Optional[str] = None
     scraped_at: Optional[datetime] = None
+    data_quality_pct: float = 0.0
+    confidence_label: str = "Unknown"
+    data_quality_reasons: List[str] = []
 
 
 class AgentBriefing(BaseModel):

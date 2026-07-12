@@ -1,5 +1,7 @@
 # CODEBASE GUIDE
 
+Tai lieu tong hop moi nhat: [docs/CODEBASE_DOCUMENTATION.md](docs/CODEBASE_DOCUMENTATION.md). File nay giu vai tro module ownership guide chi tiet.
+
 Tai lieu nay mo ta codebase theo goc nhin kien truc va ownership: file nao giu vai tro gi, sua cho nao khi muon mo rong, va luong du lieu chay qua cac module nhu the nao.
 
 ## 1. Ban do repo
@@ -265,6 +267,18 @@ Reset du lieu demo:
 - doc `data/competitor_mock.csv`
 - insert lai data
 - tinh CPI va alerts
+
+### `backend/app/services/startup_bootstrap.py`
+
+Khoi tao fresh clone an toan:
+
+- dem product truoc khi seed
+- chi seed khi catalog rong
+- chi chay o development/demo/local/test
+- khong ghi de catalog da import
+- tra bootstrap status qua root health endpoint
+
+Dieu khien bang `ENV` va `AUTO_SEED_DEMO`.
 
 ### `backend/app/services/scraped_samples.py`
 

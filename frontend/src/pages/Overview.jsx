@@ -13,14 +13,20 @@ import {
 } from 'recharts'
 import {
   Activity,
+  CheckCircle2,
   Clock3,
   Cpu,
+  Database,
+  Gauge,
   Radar,
   RefreshCw,
+  ServerOff,
+  ShieldCheck,
   ShieldAlert,
   Sparkles,
   Target,
   TrendingUp,
+  Wallet,
   Workflow,
   X,
 } from 'lucide-react'
@@ -39,8 +45,11 @@ function Overview() {
   const [loading, setLoading] = useState(!cached)
   const [triggeringScrape, setTriggeringScrape] = useState(false)
   const [triggeringAgent, setTriggeringAgent] = useState(false)
+  const [seedingDemo, setSeedingDemo] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const fetchData = async () => {
+    setLoading(true)
     try {
       if (!getCache('overview')) setLoading(true)
       const [statsRes, alertsRes, briefingRes, actionsRes, channelRes] = await Promise.all([
@@ -49,6 +58,7 @@ function Overview() {
         axios.get(`${API_BASE_URL}/agent/briefing?limit=5`),
         axios.get(`${API_BASE_URL}/agent/actions?limit=5`),
         axios.get(`${API_BASE_URL}/pricing/channel-index`),
+        axios.get(`${API_BASE_URL}/agent/kpis`),
       ])
 
       const bundle = {
@@ -66,6 +76,7 @@ function Overview() {
       setChannelIntelligence(bundle.channelIntelligence)
     } catch (err) {
       console.error('Error fetching overview data', err)
+      setLoadError(`Unable to load pricing data from ${API_ORIGIN}.`)
     } finally {
       setLoading(false)
     }
@@ -74,6 +85,12 @@ function Overview() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (!loadError) return undefined
+    const retryTimer = setInterval(fetchData, 5000)
+    return () => clearInterval(retryTimer)
+  }, [loadError])
 
   const handleTriggerScrape = async () => {
     try {
@@ -110,6 +127,18 @@ function Overview() {
     }
   }
 
+  const handleSeedDemo = async () => {
+    try {
+      setSeedingDemo(true)
+      await axios.post(`${API_BASE_URL}/products/seed-demo`)
+      await fetchData()
+    } catch (err) {
+      setLoadError(err.response?.data?.detail || `Unable to initialize the demo catalog at ${API_ORIGIN}.`)
+    } finally {
+      setSeedingDemo(false)
+    }
+  }
+
   if (loading && !stats && !briefing) {
     return <div className="loading-state">Loading pricing command center...</div>
   }
@@ -118,9 +147,13 @@ function Overview() {
   const briefingSummary = briefing?.summary
   const channels = channelIntelligence?.channels || []
   const queue = briefing?.priority_queue || []
+  const reviewedActions = (businessKpis?.approved_actions || 0) + (businessKpis?.rejected_actions || 0)
+  const catalogIsEmpty = !loading && (
+    summary?.monitored_sku === 0 || (!summary && stats?.total_sku === 0)
+  )
   const latestTaskLog = briefing?.latest_task?.logs
     ? briefing.latest_task.logs.split('\n').filter(Boolean).slice(-6)
-    : ['No autonomous run yet. Market intelligence is ready for the first decision cycle.']
+    : ['No decision cycle has run yet. Market intelligence is ready for operator review.']
 
   return (
     <div className="page-stack">
@@ -128,32 +161,60 @@ function Overview() {
         <div className="hero-copy">
           <div className="eyebrow">
             <Workflow size={14} />
-            <span>Top 200 SKU / 6 channels / daily autonomous cycle</span>
+            <span>Commercial control room / Daily market read</span>
           </div>
-          <h1>Guardian Pricing Intelligence</h1>
+          <h1>Guardian Pricing OS</h1>
           <p>
-            One operational view of effective competitor prices, promotion mechanics, pricing gaps, margin risk,
-            and human-approved commercial actions.
+            200 priority SKUs. Six channels. One decision loop turning effective competitor prices into
+            margin-safe actions for the commercial team.
           </p>
         </div>
 
         <div className="hero-actions">
           <button className="btn btn-secondary" onClick={handleTriggerScrape} disabled={triggeringScrape}>
             <RefreshCw size={16} className={triggeringScrape ? 'spin' : ''} />
-            {triggeringScrape ? 'Scanning channels...' : 'Refresh channels'}
+            {triggeringScrape ? 'Scanning channels...' : 'Refresh market'}
           </button>
           <button className="btn btn-accent" onClick={handleRunAgent} disabled={triggeringAgent}>
             <Cpu size={16} className={triggeringAgent ? 'pulse' : ''} />
-            {triggeringAgent ? 'Agent running...' : 'Run pricing agent'}
+            {triggeringAgent ? 'Cycle running...' : 'Run decision cycle'}
           </button>
         </div>
       </section>
 
+      {loadError ? (
+        <section className="system-notice system-notice-error" role="alert">
+          <div className="system-notice-icon"><ServerOff size={18} /></div>
+          <div className="system-notice-copy">
+            <strong>Pricing data connection needs attention</strong>
+            <span>{loadError}</span>
+          </div>
+          <button type="button" className="btn btn-secondary btn-compact" onClick={fetchData} disabled={loading}>
+            <RefreshCw size={15} className={loading ? 'spin' : ''} />
+            Retry
+          </button>
+        </section>
+      ) : null}
+
+      {catalogIsEmpty ? (
+        <section className="system-notice system-notice-empty">
+          <div className="system-notice-icon"><Database size={18} /></div>
+          <div className="system-notice-copy">
+            <strong>The catalog is empty</strong>
+            <span>Initialize the 200-SKU, six-channel dataset to populate Pricing Command.</span>
+          </div>
+          <button type="button" className="btn btn-accent btn-compact" onClick={handleSeedDemo} disabled={seedingDemo}>
+            <Database size={15} />
+            {seedingDemo ? 'Loading demo...' : 'Load demo data'}
+          </button>
+        </section>
+      ) : null}
+
       <section className="hero-metrics">
         <MetricCard
-          title="Target SKU coverage"
+          title="Priority SKU coverage"
           value={`${summary?.monitored_sku ?? stats?.total_sku ?? 0}/${summary?.target_sku ?? 200}`}
-          detail={`${formatPct(summary?.target_coverage_pct)} of the competition target`}
+          detail={`${formatPct(summary?.target_coverage_pct)} of the priority catalog monitored`}
           icon={<Target size={16} />}
         />
         <MetricCard
@@ -184,6 +245,45 @@ function Overview() {
           label="Latest market signal"
           value={formatAge(summary?.latest_observation_age_hours)}
         />
+      </section>
+
+      <section className="business-kpi-section">
+        <div className="section-header">
+          <div>
+            <div className="section-title section-title-inline">
+              <Wallet size={18} />
+              <span>Commercial impact scorecard</span>
+            </div>
+            <p className="section-caption">Evidence quality and estimated value under management</p>
+          </div>
+          <span className="badge badge-info">Rule-based and auditable</span>
+        </div>
+        <div className="business-kpi-grid">
+          <MetricCard
+            title="Decision confidence"
+            value={formatPct(businessKpis?.average_decision_confidence_pct)}
+            detail={`${businessKpis?.high_confidence_decisions ?? 0}/${businessKpis?.actionable_decisions ?? 0} actionable decisions have high-confidence evidence`}
+            icon={<Gauge size={16} />}
+          />
+          <MetricCard
+            title="Margin exposure under review"
+            value={formatCurrency(businessKpis?.estimated_margin_exposure_vnd)}
+            detail="Estimated price-gap value across the active decision queue"
+            icon={<ShieldAlert size={16} />}
+          />
+          <MetricCard
+            title="Protected by negotiation"
+            value={formatCurrency(businessKpis?.estimated_protected_exposure_vnd)}
+            detail="Estimated exposure routed to supplier protection instead of unsafe matching"
+            icon={<ShieldCheck size={16} />}
+          />
+          <MetricCard
+            title="Recommendation adoption"
+            value={formatPct(businessKpis?.recommendation_acceptance_pct)}
+            detail={`${businessKpis?.approved_actions ?? 0} approved of ${reviewedActions} reviewed actions`}
+            icon={<CheckCircle2 size={16} />}
+          />
+        </div>
       </section>
 
       <div className="dashboard-grid dashboard-grid-wide">
@@ -223,6 +323,9 @@ function Overview() {
                     <span className={`badge ${item.severity === 'High' ? 'badge-danger' : 'badge-warning'}`}>
                       {item.severity}
                     </span>
+                    <span className={`badge ${qualityBadgeClass(item.confidence_label)}`}>
+                      {item.confidence_label} evidence {formatPct(item.data_quality_pct)}
+                    </span>
                   </div>
                   <strong>{item.product_name}</strong>
                   <p>{item.rationale}</p>
@@ -258,7 +361,7 @@ function Overview() {
                     domain={['dataMin - 10', 'dataMax + 10']}
                   />
                   <Tooltip
-                    cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
+                    cursor={{ fill: 'rgba(255, 212, 0, 0.12)' }}
                     contentStyle={{
                       backgroundColor: '#ffffff',
                       borderColor: 'rgba(15, 23, 42, 0.12)',
@@ -270,7 +373,7 @@ function Overview() {
                       'CPI',
                     ]}
                   />
-                  <ReferenceLine y={100} stroke="#5f6f68" strokeDasharray="5 4" />
+                  <ReferenceLine y={100} stroke="#66665f" strokeDasharray="5 4" />
                   <Bar dataKey="cpi" radius={[4, 4, 0, 0]}>
                     {channels.map((entry) => (
                       <Cell key={entry.channel} fill={channelColor(entry.position)} />
@@ -429,6 +532,11 @@ function formatPct(value) {
   return `${value.toFixed(1)}%`
 }
 
+function formatCurrency(value) {
+  if (typeof value !== 'number') return '--'
+  return `${Math.round(value).toLocaleString('en-GB')} VND`
+}
+
 function formatIndex(value) {
   if (typeof value !== 'number') return '--'
   return value.toFixed(1)
@@ -443,13 +551,19 @@ function formatAge(value) {
 function channelColor(position) {
   if (position === 'guardian_premium') return '#c2410c'
   if (position === 'guardian_value') return '#0f9f72'
-  return '#0f766e'
+  return '#d4ad00'
 }
 
 function actionStatusClass(status) {
   if (status === 'Approved' || status === 'Executed') return 'badge-success'
   if (status === 'Rejected') return 'badge-danger'
   return 'badge-warning'
+}
+
+function qualityBadgeClass(label) {
+  if (label === 'High') return 'badge-success'
+  if (label === 'Medium') return 'badge-warning'
+  return 'badge-danger'
 }
 
 function parseActionPayload(rawData) {

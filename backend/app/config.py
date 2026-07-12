@@ -21,9 +21,11 @@ class Settings(BaseSettings):
 
     # Backwards compatibility / defaults
     ENV: str = "development"
+    AUTO_SEED_DEMO: bool = True
 
     # Database engine selection
     USE_SQLITE: bool = True
+    SQLITE_DB_PATH: str = ""
 
     # Full connection string (Neon/Supabase/etc). If set, overrides the fields below.
     # Accepts either DATABASE_URL or the legacy DB_URL name used in .env.

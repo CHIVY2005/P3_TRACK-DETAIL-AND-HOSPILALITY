@@ -267,7 +267,7 @@ function ProductInsights() {
                       <Line type="monotone" dataKey="Lazada" stroke="#2563eb" strokeWidth={1.5} dot={{ r: 3 }} />
                       <Line type="monotone" dataKey="TikTok Shop" stroke="#111827" strokeWidth={1.5} dot={{ r: 3 }} />
                       <Line type="monotone" dataKey="GrabMart" stroke="#0f9f72" strokeWidth={1.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="Hasaki" stroke="#d97706" strokeWidth={1.5} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="Hasaki" stroke="#9b7c00" strokeWidth={1.5} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

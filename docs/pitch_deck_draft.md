@@ -23,7 +23,7 @@ Can mot he thong vua nhin thay thi truong theo thoi gian gan that, vua kiem soat
 
 Tieu de:
 
-`GUARDIAN Pricing Command Center`
+`GUARDIAN Pricing OS`
 
 Noi dung:
 
@@ -94,12 +94,12 @@ Diem hay can nhan manh:
 
 Flow demo nen di:
 
-1. vao `Operations Config`
+1. vao `Guardrails`
 2. bam seed demo hoac import dataset
-3. sang `Mission Control`
+3. sang `Pricing Command`
 4. show `200/200`, CPI theo 6 kenh, freshness, promotion intelligence va priority queue
 5. sang `SKU Insights` de show raw pricing va history
-6. sang `Agent Workspace` de run agent
+6. sang `Decision Desk` de run decision cycle
 7. mo decision audit trail va Langfuse trace
 8. approve 1 `AUTO_PRICE_MATCH`
 9. quay lai dashboard cho thay state thay doi

@@ -9,11 +9,14 @@ Tao file `.env` o thu muc goc.
 Vi du:
 
 ```text
+ENV=development
+AUTO_SEED_DEMO=True
 APIFY_API_TOKEN=your_apify_token
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
 LANGFUSE_HOST=https://cloud.langfuse.com
 USE_SQLITE=true
+SQLITE_DB_PATH=
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
@@ -28,6 +31,8 @@ Luu y:
 - agent pricing la rule-based/template va khong can `OPENAI_API_KEY`
 - neu khong co `APIFY_API_TOKEN`, scraper van chay theo fallback / simulated pricing
 - neu khong co Langfuse keys, tracing tu dong tat
+- `AUTO_SEED_DEMO=True` chi seed khi catalog rong va chi o development/demo/local/test
+- production nen dat `ENV=production` va `AUTO_SEED_DEMO=False`
 
 ## 2. Database mode
 
@@ -43,6 +48,12 @@ thi app dung file:
 
 ```text
 backend/guardian.db
+```
+
+Co the dung file SQLite khac de test fresh clone:
+
+```text
+SQLITE_DB_PATH=../tmp/guardian-fresh.db
 ```
 
 Neu doi qua Postgres:
@@ -80,14 +91,21 @@ npm run dev
 Frontend mac dinh goi:
 
 ```text
-http://localhost:8001/api/v1
+http://127.0.0.1:8001/api/v1
 ```
 
 Neu can doi:
 
 ```text
-VITE_API_ORIGIN=http://localhost:8001
+VITE_API_ORIGIN=http://127.0.0.1:8001
 ```
+
+Neu UI khong co data:
+
+1. xem sidebar `Backend API` co `Online` khong
+2. goi `GET http://127.0.0.1:8001/` va doc field `bootstrap`
+3. neu backend online nhung catalog rong, bam `Load demo data` tren Pricing Command
+4. neu backend offline, dam bao backend dang chay dung port `8001` hoac set `VITE_API_ORIGIN`
 
 ## 5. Chay demo nhanh
 
@@ -95,9 +113,9 @@ Thu tu de an toan:
 
 1. chay backend
 2. chay frontend
-3. vao `Operations Config`
+3. vao `Guardrails`
 4. bam `Reload demo dataset`
-5. sang `Mission Control`
+5. sang `Pricing Command`
 6. trigger scrape hoac run agent
 
 ## 6. Import dataset that

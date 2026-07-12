@@ -121,4 +121,7 @@ def _build_context(alert, product, latest_price, cfg) -> Dict[str, Any]:
         "message": alert.message,
         "channel_url": latest_price.url,
         "scraped_at": latest_price.scraped_at.isoformat() if latest_price.scraped_at else None,
+        "data_quality_pct": quality["data_quality_pct"],
+        "confidence_label": quality["confidence_label"],
+        "data_quality_reasons": quality["data_quality_reasons"],
     }

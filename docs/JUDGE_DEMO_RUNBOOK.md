@@ -23,7 +23,7 @@ Kiem tra nhanh:
 - frontend: `http://127.0.0.1:3000/`
 - Langfuse runtime URL: `GET /api/v1/agent/runtime-status`
 
-Neu database chua dung demo state, vao `Operations Config` va bam `Reload demo dataset`.
+Neu database chua dung demo state, vao `Guardrails` va bam `Reload demo dataset`.
 
 ## 2. Demo flow 5 phut
 
@@ -33,7 +33,7 @@ Noi ngan:
 
 > Gia niem yet khong phai gia that. Commercial team can biet effective price sau discount, voucher, bundle va flash sale tren tat ca kenh, nhung van phai bao ve margin.
 
-### 0:30 - 1:30: Mission Control
+### 0:30 - 1:30: Pricing Command
 
 Chi vao bon KPI:
 
@@ -81,7 +81,7 @@ Chon mot SKU co CPI lech nhieu:
 
 ### 3:00 - 4:15: Agent decision
 
-Tai `Agent Workspace`:
+Tai `Decision Desk`:
 
 1. bam `Run pricing agent` voi refresh data tat neu mang thi bi gioi han
 2. show decision audit trail
@@ -114,7 +114,7 @@ Competitor channels:         6
 7-day price observations:    8,400
 Competitor links:            1,200
 Daily scheduler interval:    86,400 seconds
-Backend tests:               9
+Backend tests:               12
 ```
 
 Endpoint quan trong:

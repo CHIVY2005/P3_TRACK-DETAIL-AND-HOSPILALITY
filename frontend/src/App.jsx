@@ -6,6 +6,7 @@ import {
   BarChart3,
   LayoutDashboard,
   PackageSearch,
+  Server,
   Settings,
   ShieldAlert,
 } from 'lucide-react'
@@ -18,7 +19,7 @@ const Visualization = lazy(() => import('./pages/Visualization.jsx'))
 const Configuration = lazy(() => import('./pages/Configuration.jsx'))
 
 const NAV_ITEMS = [
-  { key: 'overview', label: 'Mission Control', icon: LayoutDashboard },
+  { key: 'overview', label: 'Pricing Command', icon: LayoutDashboard },
   { key: 'products', label: 'SKU Insights', icon: PackageSearch },
   { key: 'agent', label: 'Agent Workspace', icon: Bot },
   { key: 'visualization', label: 'Visualization', icon: BarChart3 },
@@ -30,27 +31,51 @@ function App() {
   const [scraperRunning, setScraperRunning] = useState(false)
   const [agentRunning, setAgentRunning] = useState(false)
   const [alertCount, setAlertCount] = useState(0)
+  const [backendOnline, setBackendOnline] = useState(null)
 
   useEffect(() => {
     const fetchStatuses = async () => {
       try {
-        const [scraperRes, tasksRes, alertsRes] = await Promise.all([
+        const results = await Promise.allSettled([
           axios.get(`${API_BASE_URL}/scraper/status`),
           axios.get(`${API_BASE_URL}/agent/tasks?limit=1`),
           axios.get(`${API_BASE_URL}/alerts`),
         ])
 
-        setScraperRunning(Boolean(scraperRes.data?.is_running))
-        setAlertCount(alertsRes.data.length)
+        const scraperRes = results[0].status === 'fulfilled' ? results[0].value : null
+        const tasksRes = results[1].status === 'fulfilled' ? results[1].value : null
+        const alertsRes = results[2].status === 'fulfilled' ? results[2].value : null
 
-        if (tasksRes.data.length > 0) {
-          const status = tasksRes.data[0].status
-          setAgentRunning(status === 'Running' || status === 'Pending')
-        } else {
+        const isOnline = results.some(r => r.status === 'fulfilled')
+        setBackendOnline(isOnline)
+
+        if (!isOnline) {
+          setScraperRunning(false)
           setAgentRunning(false)
+          setAlertCount(0)
+          return
+        }
+
+        if (scraperRes) {
+          setScraperRunning(Boolean(scraperRes.data?.is_running))
+        }
+        if (alertsRes) {
+          setAlertCount(alertsRes.data.length)
+        }
+        if (tasksRes) {
+          if (tasksRes.data.length > 0) {
+            const status = tasksRes.data[0].status
+            setAgentRunning(status === 'Running' || status === 'Pending')
+          } else {
+            setAgentRunning(false)
+          }
         }
       } catch (err) {
         console.error('Failed to connect to backend API. Ensure FastAPI is running.', err)
+        setBackendOnline(false)
+        setScraperRunning(false)
+        setAgentRunning(false)
+        setAlertCount(0)
       }
     }
 
@@ -84,8 +109,8 @@ function App() {
             <ShieldAlert size={18} />
           </div>
           <div className="brand-copy">
-            <strong>Guardian Pricing OS</strong>
-            <span>Hackathon MVP command layer</span>
+            <strong>GUARDIAN</strong>
+            <span>Pricing Intelligence OS</span>
           </div>
         </div>
 
@@ -109,6 +134,15 @@ function App() {
 
         <div className="status-panel">
           <div className="sidebar-section-label">System pulse</div>
+          <div className="status-row">
+            <div className="status-row-label">
+              <Server size={14} />
+              <span>Backend API</span>
+            </div>
+            <span className={`status-pill ${backendOnline ? 'good' : backendOnline === false ? 'bad' : 'muted'}`}>
+              {backendOnline ? 'Online' : backendOnline === false ? 'Offline' : 'Checking'}
+            </span>
+          </div>
           <div className="status-row">
             <div className="status-row-label">
               <Activity size={14} />

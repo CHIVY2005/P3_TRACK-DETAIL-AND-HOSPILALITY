@@ -27,7 +27,7 @@ class CompetitorPrice(Base):
     __tablename__ = "competitor_prices"
 
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     competitor_name = Column(String(100), index=True, nullable=False)  # Shopee, Lazada, TikTok Shop, etc.
     raw_price = Column(Float, nullable=True)
     discount = Column(Float, default=0.0)
@@ -48,7 +48,7 @@ class CompetitorLink(Base):
     __tablename__ = "competitor_links"
 
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     platform = Column(String(100), nullable=False, index=True)
     url = Column(String(500), nullable=False)
     discovery_method = Column(String(50), nullable=False, default="manual")
@@ -62,7 +62,7 @@ class PricingIndex(Base):
     __tablename__ = "pricing_indices"
 
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     competitor_index = Column(Float, nullable=False)  # CPI: (Guardian / Avg Competitor) * 100
     average_competitor_price = Column(Float, nullable=False)
     recommendation = Column(String(100), nullable=False)  # Maintain, Lower Price, Increase Price
@@ -76,7 +76,7 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     alert_type = Column(String(50), nullable=False)  # Underpriced, Overpriced, Promo Active
     message = Column(Text, nullable=False)
     severity = Column(String(20), nullable=False)  # Low, Medium, High
@@ -104,8 +104,8 @@ class AgentAction(Base):
     __tablename__ = "agent_actions"
 
     id = Column(Integer, primary_key=True, index=True)
-    task_id = Column(Integer, ForeignKey("agent_tasks.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(Integer, ForeignKey("agent_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     action_type = Column(String(100), nullable=False) # AUTO_PRICE_MATCH, SUPPLIER_EMAIL_DRAFT, etc.
     description = Column(Text, nullable=False)
     status = Column(String(50), default="Pending", nullable=False) # Pending, Approved, Rejected, Executed

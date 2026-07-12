@@ -276,6 +276,18 @@ Co che an toan:
 - neu agent dang chay thu cong, scheduler se bo qua tick do
 - runtime status co the doc qua `GET /api/v1/agent/runtime-status`
 
+### Fresh clone bootstrap
+
+`guardian.db` khong nam trong Git, nen may clone moi co database rong. Trong local/demo, startup chay `ensure_startup_catalog()` truoc scheduler:
+
+1. table duoc tao boi SQLAlchemy metadata
+2. dem `products`
+3. neu count bang 0 va `AUTO_SEED_DEMO=True`, nap bo 200 SKU
+4. neu da co product, giu nguyen catalog
+5. neu `ENV=production`, khong auto-seed fixture
+
+Root endpoint tra `bootstrap` status de UI va operator phan biet backend offline, database rong va catalog da san sang.
+
 ## 12. Workflow 11: Branch evidence
 
 File:
@@ -290,7 +302,7 @@ Muc dich:
 
 - show bang chung branch crawl co data that
 - match nhe listing voi catalog hien tai
-- dua evidence vao man Mission Control
+- expose evidence qua scraper sample endpoint khi can doi chieu
 
 Day la lop adapter cho pitch, khong phai matching engine production.
 

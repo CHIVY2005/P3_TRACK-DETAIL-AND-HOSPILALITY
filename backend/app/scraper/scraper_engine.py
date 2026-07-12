@@ -678,7 +678,7 @@ async def scrape_competitor_prices_for_product_async(db: Session, product_id: in
 
     return new_prices
 
-def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
+def scrape_realtime_competitor_prices(db: Session, product_id: int, force_simulation: bool = False, commit: bool = True) -> list:
     """
     Synchronous wrapper to run async scraper in FastAPI routes.
     """
@@ -692,9 +692,9 @@ def scrape_realtime_competitor_prices(db: Session, product_id: int) -> list:
         # Run in thread or task if loop is already running
         import nest_asyncio
         nest_asyncio.apply()
-        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id))
+        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id, force_simulation, commit))
     else:
-        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id))
+        return loop.run_until_complete(scrape_competitor_prices_for_product_async(db, product_id, force_simulation, commit))
 
 async def _scrape_all_products_async(product_ids: list) -> dict:
     """Scrape many SKUs concurrently, each on its own DB session (Sessions are not safe

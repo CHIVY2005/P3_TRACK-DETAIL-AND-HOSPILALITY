@@ -1,4 +1,4 @@
-# GUARDIAN Pricing Command Center
+# GUARDIAN Pricing OS
 
 GUARDIAN la mot MVP cho bai toan theo doi gia doi thu, tinh chi so CPI, va de xuat hanh dong dieu chinh gia theo vong:
 
@@ -24,7 +24,7 @@ GUARDIAN giai quyet 4 van de chinh:
 
 ```text
 Frontend React
-  -> hien Mission Control, SKU Insights, Agent Workspace, Configuration
+  -> hien Pricing Command, SKU Insights, Decision Desk, Guardrails
 
 FastAPI Backend
   -> Products / Pricing / Alerts / Scraper / Agent / Sync APIs
@@ -157,21 +157,21 @@ Trang thai agent va scheduler co the xem qua:
 
 Frontend da duoc doi thanh mot shell van hanh ro rang hon:
 
-- `Mission Control`: overview va decision queue
+- `Pricing Command`: overview va decision queue
 - `SKU Insights`: drill-down tung san pham
-- `Agent Workspace`: run agent, xem logs, approve actions
-- `Operations Config`: threshold, upload dataset, seed demo
+- `Decision Desk`: run decision cycle, xem logs, approve actions
+- `Guardrails`: threshold, upload dataset, seed demo
 
 Mac dinh frontend goi backend tai:
 
 ```text
-http://localhost:8001/api/v1
+http://127.0.0.1:8001/api/v1
 ```
 
 Co the doi qua env:
 
 ```text
-VITE_API_ORIGIN=http://localhost:8001
+VITE_API_ORIGIN=http://127.0.0.1:8001
 ```
 
 ## 6. API quan trong
@@ -255,8 +255,33 @@ npm run dev
 App:
 
 ```text
-http://localhost:3000
+http://127.0.0.1:3000
 ```
+
+### Fresh clone va database rong
+
+File `guardian.db` khong duoc commit vao Git. O moi truong `development`, `demo`, `local` hoac `test`, backend mac dinh dung:
+
+```text
+AUTO_SEED_DEMO=True
+```
+
+Lan startup dau tien se chi seed khi bang `products` rong:
+
+- 200 products
+- 8.400 competitor price observations
+- 1.200 competitor links
+- 6 channels
+
+Neu catalog da co du lieu import, startup giu nguyen va khong seed lai. Dat `AUTO_SEED_DEMO=False` hoac `ENV=production` de tat co che nay.
+
+Kiem tra startup:
+
+```text
+GET http://127.0.0.1:8001/
+```
+
+Field `bootstrap.seeded` cho biet database vua duoc khoi tao hay da giu catalog cu. Pricing Command cung hien Backend API `Online/Offline`, loi endpoint, va nut `Load demo data` khi database rong.
 
 ## 8. Trang thai hien tai
 
@@ -271,6 +296,7 @@ Da co:
 - daily autonomous scheduler 1 ngay / lan
 - human approval workflow
 - UI dashboard moi theo kieu operator console
+- fresh-clone bootstrap va empty-state recovery
 - scorecard bam sat `P3.pdf`: 200 SKU, 6 kenh, CPI theo kenh, freshness va promotion intelligence
 - bo test backend chay full seed 200 SKU
 
@@ -301,8 +327,15 @@ Bo test hien tai kiem tra:
 
 ## 10. Tai lieu nen doc tiep
 
+- [Codebase documentation tong hop](docs/CODEBASE_DOCUMENTATION.md)
+
 - [CODEBASE_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/CODEBASE_GUIDE.md)
+- [End-to-end workflow va database modes](docs/END_TO_END_WORKFLOW.md)
+- [Current architecture](docs/ARCHITECTURE_DIAGRAM.md)
+- [Top-5 competition strategy](docs/TOP5_COMPETITION_STRATEGY.md)
 - [TECHNICAL_EXPLANATION.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/TECHNICAL_EXPLANATION.md)
+- [docs/ARCHITECTURE_DIAGRAM.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/ARCHITECTURE_DIAGRAM.md)
 - [docs/CONFIG_AND_DEPLOY_GUIDE.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/CONFIG_AND_DEPLOY_GUIDE.md)
 - [docs/pitch_deck_draft.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/pitch_deck_draft.md)
 - [docs/JUDGE_DEMO_RUNBOOK.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/JUDGE_DEMO_RUNBOOK.md)
+- [docs/TOP5_COMPETITION_STRATEGY.md](/C:/Users/ADMIN/Desktop/tailieuhoc/STUDYYY/REPO/P3_TRACK-DETAIL-AND-HOSPILALITY/docs/TOP5_COMPETITION_STRATEGY.md)
