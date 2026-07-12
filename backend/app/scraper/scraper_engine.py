@@ -338,6 +338,71 @@ async def scrape_via_pharmacity_api(search_target: str, competitor_name: str, gu
     return None
 
 
+# Hasaki public suggestion API (free JSON, no proxy/browser). Override via HASAKI_API_URL;
+# must contain a "{keyword}" placeholder for the URL-encoded search term.
+HASAKI_API = os.getenv(
+    "HASAKI_API_URL",
+    "https://hasaki.vn/api/v4/main/suggestion?q={keyword}",
+)
+
+
+async def scrape_via_hasaki_api(search_target: str, competitor_name: str, guardian_price=None) -> dict:
+    """Hit Hasaki's public suggestion JSON API directly (free, reliable, no BrightData/browser).
+    Products live in data.products[]; price=original, final_price=net."""
+    if competitor_name != "Hasaki":
+        return None
+
+    from urllib.parse import quote
+
+    url = HASAKI_API.format(keyword=quote(search_target))
+
+    def _fetch_json():
+        import requests
+        resp = requests.get(
+            url,
+            headers={
+                "User-Agent": settings.USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+            timeout=settings.REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    try:
+        data = await asyncio.wait_for(asyncio.to_thread(_fetch_json), timeout=settings.REQUEST_TIMEOUT + 5)
+        products = ((data or {}).get("data") or {}).get("products") or []
+
+        candidates = []
+        for item in products:
+            net = item.get("final_price") or item.get("price")
+            if not net:
+                continue
+            raw = item.get("price") or net
+            product_url = item.get("url") or ""
+            if product_url and not product_url.startswith("http"):
+                product_url = f"https://hasaki.vn/{product_url.lstrip('/')}"
+            promo = item.get("promotion_percent") or 0
+            candidates.append({
+                "name": item.get("title"),
+                "raw_price": float(raw),
+                "net_price": float(net),
+                "price": float(net),  # used by the matcher
+                "discount": max(float(raw) - float(net), 0.0),
+                "stock_status": "IN_STOCK",
+                "voucher_details": None,
+                "promo_mechanics": f"Hasaki -{promo}%" if promo else "Hasaki API",
+                "url": product_url,
+            })
+
+        return _best_candidate(candidates, search_target, guardian_price)
+    except Exception as e:
+        print(f"Hasaki API failed: {e}")
+
+    return None
+
+
 async def scrape_via_crawl4ai(barcode: str, competitor_name: str, target_url: str | None = None) -> dict:
     """
     Integrates Crawl4AI to crawl competitor pharmacy/health websites (e.g. Hasaki, Pharmacity)
@@ -526,11 +591,15 @@ async def _fetch_competitor_price(product, competitor: str, link_url):
         if price_data:
             price_data = map_marketplace_result(competitor, price_data, link_url)
 
-    # 2a. Try Bright Data Web Unlocker API for Hasaki (bypasses bot protection).
+    # 2a. Hasaki: hit its public suggestion JSON API first (free, fast, reliable).
+    if not price_data and competitor in ["Hasaki"]:
+        price_data = await scrape_via_hasaki_api(product.name or product.barcode, competitor, product.guardian_price)
+
+    # 2b. Fall back to Bright Data Web Unlocker API for Hasaki (bypasses bot protection).
     if not price_data and competitor in ["Hasaki"]:
         price_data = await scrape_via_brightdata(product.barcode, competitor, link_url)
 
-    # 2b. Fall back to direct Playwright for Hasaki (TikTok Shop left to simulator).
+    # 2c. Fall back to direct Playwright for Hasaki (TikTok Shop left to simulator).
     if not price_data and competitor in ["Hasaki"]:
         price_data = await scrape_via_playwright(product.barcode, competitor, link_url)
 
